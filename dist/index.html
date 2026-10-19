@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#164e43">
+  <meta name="description" content="PrivacyLens: a CCST9003 prototype for making thoughtful privacy choices before sharing screenshots.">
+  <title>PrivacyLens — Share with intention</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <svg class="icon-library" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><defs>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 4 6v6c0 5 8 9 8 9s8-4 8-9V6Z"/><path d="m8.5 12 2.3 2.3 4.7-4.6"/></symbol>
+    <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V3m-5 5 5-5 5 5M4 15v5h16v-5"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v13m-5-5 5 5 5-5M4 17v4h16v-4"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M4 12h16m-6-6 6 6-6 6"/></symbol>
+    <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></symbol>
+    <symbol id="i-support" viewBox="0 0 24 24"><path d="M4 13v-2a8 8 0 0 1 16 0v2M4 11H2v7h5v-7Zm16 0h2v7h-5v-7Zm0 7c0 3-4 3-8 3"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3m-4 4v3"/></symbol>
+    <symbol id="i-box" viewBox="0 0 24 24"><path d="m3 7 9-4 9 4v11l-9 4-9-4Zm0 0 9 4 9-4M12 11v11M7 5l10 5"/></symbol>
+    <symbol id="i-crop" viewBox="0 0 24 24"><path d="M4 2v18h18M2 4h18v18"/></symbol>
+    <symbol id="i-reset" viewBox="0 0 24 24"><path d="M4 10a8 8 0 1 1 1 8M4 4v6h6"/></symbol>
+    <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10v1"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></symbol>
+  </defs></svg>
+  <header class="topbar">
+    <a href="#" class="brand" aria-label="PrivacyLens home"><span class="brand-mark"><svg><use href="#i-shield"/></svg></span>Privacy<span>Lens</span></a>
+    <div class="header-right"><span class="project-label">CCST9003 / GROUP PROJECT</span><button class="text-button" id="aboutButton">About the prototype <svg><use href="#i-info"/></svg></button></div>
+  </header>
+  <main>
+    <section class="intro">
+      <div><div class="eyebrow"><span></span> A LITTLE CONTEXT. A LOT MORE PRIVACY.</div><h1>Share the story.<br>Keep the personal details.</h1><p>Useful screenshots shouldn’t come with unwanted disclosure.<br class="desktop-break"> Choose who it’s for. Review what stays. Share with intention.</p></div>
+      <div class="intro-note"><svg><use href="#i-lock"/></svg><div><strong>Your screenshot stays here.</strong><p>Images are edited in this browser.<br>No image uploads. No saved history.</p></div></div>
+    </section>
+    <div class="workflow" aria-label="Workflow"><span class="step complete"><b>1</b> Choose a screenshot</span><span class="step-line"></span><span class="step active"><b>2</b> Set context & review</span><span class="step-line"></span><span class="step"><b>3</b> Export a copy</span><span class="prototype-pill">INTERACTIVE PROTOTYPE</span></div>
+    <section class="workspace" aria-label="Screenshot editor">
+      <aside class="setup-panel">
+        <div class="section-kicker">01 / YOUR SCREENSHOT</div>
+        <h2>A starting point.</h2><p class="muted">Try our fictional order, or bring your own.</p>
+        <button id="sampleButton" class="sample-card selected"><span class="sample-icon"><svg><use href="#i-box"/></svg></span><span><strong>Order screenshot</strong><small>Fictional sample · 6 labelled fields</small></span><svg class="sample-check"><use href="#i-check"/></svg></button>
+        <button id="uploadButton" class="upload-button"><svg><use href="#i-upload"/></svg> Choose your own image<span>PNG, JPG or WebP · up to 20 MB</span></button><input type="file" id="fileInput" accept="image/png,image/jpeg,image/webp" hidden>
+        <div class="panel-divider"></div>
+        <div class="section-kicker">02 / SHARING CONTEXT</div><h2>Who’s it for?</h2><p class="muted">The same image. Different reasons to share.</p>
+        <div class="context-options" role="group" aria-label="Sharing context">
+          <button class="context-card selected" id="publicContext" aria-pressed="true"><span class="context-icon"><svg><use href="#i-globe"/></svg></span><span><strong>A public audience</strong><small>Ask about a delivery delay</small></span><span class="radio-dot"></span></button>
+          <button class="context-card" id="supportContext" aria-pressed="false"><span class="context-icon"><svg><use href="#i-support"/></svg></span><span><strong>Official customer support</strong><small>Locate this order & check delivery</small></span><span class="radio-dot"></span></button>
+        </div>
+        <div class="context-explanation" id="contextExplanation"><span class="tiny-label">WHY CONTEXT MATTERS</span><p>A public post needs the delivery status, but not the details that identify you or your order.</p></div>
+        <div class="local-note"><svg><use href="#i-shield"/></svg><span>You make the final call.<br>Every suggestion can be changed.</span></div>
+      </aside>
+      <section class="preview-panel" aria-labelledby="previewHeading">
+        <div class="preview-header"><div><h2 id="previewHeading">Your sharing preview</h2><span id="fileLabel">fictional-order.png</span></div><div class="view-switch" role="group" aria-label="Preview mode"><button id="originalView" aria-pressed="false">Original</button><button id="protectedView" class="active" aria-pressed="true">Protected</button></div></div>
+        <div class="canvas-stage" id="canvasStage"><div class="canvas-wrap" id="canvasWrap"><canvas id="previewCanvas" width="760" height="1030" role="img" aria-label="Fictional order screenshot with selected private information covered"></canvas><div id="drawHint" class="draw-hint" hidden>Drag to draw a solid mask</div></div></div>
+        <div class="preview-toolbar"><button id="drawButton" class="tool-button" aria-pressed="false"><svg><use href="#i-crop"/></svg> Add a mask</button><button id="undoButton" class="tool-button" disabled>Undo last mask</button><button id="resetButton" class="tool-button reset-button" aria-label="Reset recommendations and remove manual masks"><svg><use href="#i-reset"/></svg></button><span id="canvasHint">Solid masks · flattened on export</span></div>
+        <div class="preview-footnote"><span class="green-dot"></span><span id="previewNote">Delivery status, item and timeline stay readable.</span></div>
+      </section>
+      <aside class="review-panel">
+        <div class="section-kicker">03 / YOU’RE IN CONTROL</div><div class="review-title"><h2>Review the details.</h2><span class="count-badge" id="maskCount">6</span></div>
+        <p class="muted" id="reviewIntro">Suggested masks for a public post. Toggle any field to change it.</p>
+        <div class="demo-notice"><svg><use href="#i-info"/></svg><span id="demoNotice">Sample fields are pre-labelled.<br>Live OCR is not connected.</span></div>
+        <div id="fieldList" class="field-list"></div>
+        <div id="manualList" class="manual-list"></div>
+        <div class="preserve-note" id="preserveNote"><span class="preserve-icon"><svg><use href="#i-check"/></svg></span><div><strong>The useful part stays.</strong><p>Delivery status, product and dates help explain the delay.</p></div></div>
+        <div class="export-area"><div class="export-summary"><strong id="summaryText">6 fields hidden</strong><span>Review before sharing</span></div><button id="exportButton" class="primary-button">Review & export <svg><use href="#i-arrow"/></svg></button><p>Creates a new PNG. Your original stays intact.</p></div>
+      </aside>
+    </section>
+    <section class="principle-strip"><div><span class="principle-number">01</span><div><strong>Purpose before pixels.</strong><p>What’s appropriate depends on why you share.</p></div></div><div><span class="principle-number">02</span><div><strong>Suggestions, with reasons.</strong><p>Understand each choice. Change any of them.</p></div></div><div><span class="principle-number">03</span><div><strong>A copy you control.</strong><p>Solid redactions applied directly to the exported image.</p></div></div></section>
+    <footer><span>PrivacyLens <span class="footer-dot">/</span> A CCST9003 concept in progress</span><span>Built for thoughtful sharing.</span></footer>
+  </main>
+  <div class="toast" id="toast" role="status" hidden></div>
+  <dialog id="aboutDialog"><div class="dialog-top"><span class="eyebrow">BEHIND THE PROTOTYPE</span><button class="icon-button" data-close="aboutDialog" aria-label="Close about dialog"><svg><use href="#i-x"/></svg></button></div><h2>Privacy depends on context.</h2><p>PrivacyLens explores a simple question: can choosing the recipient and purpose help students share useful screenshots with less unnecessary disclosure?</p><div class="about-grid"><div><strong>Working in this version</strong><p>Two sharing scenarios, explained sample recommendations, editable masks, local image import and flattened PNG export.</p></div><div><strong>Still to be developed</strong><p>Real OCR, automatic detection on uploaded images, broader screenshot types and evaluation with students.</p></div></div><div class="chinese-note"><strong>课堂演示建议 / Demo guide</strong><p>先选公开发帖，观察订单号被遮住；再切换官方客服，订单号会保留，但姓名、电话和地址仍默认遮住。逐项查看原因，手动调整，再导出。这是分享情境规则的演示，不是真实 OCR 识别。</p></div><p class="dialog-small">All sample personal details are fictional. No image leaves your browser through this prototype. Recommendations are not a guarantee that every sensitive detail is covered.</p><button class="primary-button" data-close="aboutDialog">Back to the prototype <svg><use href="#i-arrow"/></svg></button></dialog>
+  <dialog id="exportDialog"><div class="dialog-top"><span class="eyebrow">ONE LAST LOOK</span><button class="icon-button" data-close="exportDialog" aria-label="Close export dialog"><svg><use href="#i-x"/></svg></button></div><h2>Ready for your audience?</h2><p id="exportContext"></p><div class="export-preview"><img id="exportPreview" alt="Preview of the exact redacted PNG to download"></div><div id="exportDetails" class="export-details"></div><label class="confirmation"><input type="checkbox" id="reviewConfirmation"><span>I’ve reviewed the whole image, including any details the suggestions may have missed.</span></label><button id="downloadButton" class="primary-button" disabled><svg><use href="#i-download"/></svg> Download protected PNG</button><p class="dialog-small">Only this flattened image is exported. No original image or hidden text is embedded.</p></dialog>
+  <script src="app.js" type="module"></script>
+</body>
+</html>
