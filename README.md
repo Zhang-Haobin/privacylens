@@ -8,6 +8,12 @@ From this directory, run `python3 -m http.server 4173 --directory dist` and open
 
 No package installation, API key, build step, or external asset request is needed. You can also open `dist/index.html` through a local server as above. Source: `dist/index.html`, `dist/styles.css`, `dist/app.js`.
 
+## Deploy with GitHub and Vercel
+
+Push this directory (the one containing `vercel.json`) to a GitHub repository, then import that repository in Vercel. Use the repository root as **Root Directory** and **Other** as the framework preset. `vercel.json` disables installation/build commands and publishes `dist` directly. No environment variables are required.
+
+Vercel's GitHub integration deploys changes pushed to `main` to production and creates preview deployments for pull requests. Commit the files inside `dist`: they are the source for this buildless project. Keep `.vercel`, local environment files and credentials out of Git.
+
 ## What works
 
 - Fictional order screenshot generated in the browser; six pre-labelled personal fields.
