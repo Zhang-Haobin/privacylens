@@ -1,5 +1,11 @@
 # Verification record
 
+## Mask wipe animation — 26 October 2026
+
+- Preview masks now use a separate, non-interactive DOM layer with a 380 ms eased horizontal scale: covering grows from the left, removal shrinks toward the left. Export still draws complete masks directly into a separate canvas from final state. New image loads clear pending animations; reduced-motion preferences apply changes immediately.
+- Browser checks: sample masks aligned with the image; direct removal and field-switch changes updated the count; resetting restored the missing mask; rapid on/off/on left exactly six masks and six fully expanded layers. Original view hid the layer while retaining six selections. Export after removing the name showed the name and five solid masks.
+- `npm test`: 27 existing tests passed. JavaScript syntax and `git diff --check` passed. Reduced-motion and physical touch-device behavior were not separately exercised. Local export screenshot: `qa/mask-wipe-export.png`. No production deployment performed.
+
 ## Click to remove masks — 26 October 2026
 
 - Protected preview now removes the clicked mask, updates suggested-field switches and mask totals, and offers a pointer cursor and hover tooltip. Original preview and drawing mode do not remove masks.

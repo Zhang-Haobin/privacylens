@@ -3,6 +3,11 @@ import { localSuggestions, suggestionsToFields, textPayload, validateClassificat
 const $ = (id) => document.getElementById(id);
 const canvas = $('previewCanvas');
 const ctx = canvas.getContext('2d');
+const maskLayer = document.createElement('div');
+maskLayer.className = 'mask-layer'; maskLayer.setAttribute('aria-hidden', 'true'); canvas.after(maskLayer);
+const previewMasks = new Map();
+const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+let previewLoadId = -1;
 const base = document.createElement('canvas');
 const b = base.getContext('2d');
 const state = { context: 'public', source: 'sample', view: 'protected', drawing: false, fields: [], manual: [], drag: null, filename: 'fictional-order.png', nextId: 1, loadId: 0, aiDetected: false, detecting: false, detectedModel: '', ocrDocument: null, phase: '', zoom: false, highlighted: null };
@@ -90,8 +95,56 @@ function drawImage(target, includeMasks = true) {
     [...state.fields.filter(f => f.hidden).map(f => f.rect), ...state.manual.map(m => m.rect)].forEach(r => c.fillRect(...r));
   }
 }
+function transitionMask(record, visible, animate) {
+  if (record.visible === visible && animate) return;
+  const from = getComputedStyle(record.element).transform;
+  if (record.animation) { record.animation.onfinish = null; record.animation.cancel(); }
+  record.visible = visible;
+  const to = `scaleX(${visible ? 1 : 0})`;
+  record.element.style.transform = to;
+  const finish = () => {
+    record.animation = null;
+    if (!record.visible) { record.element.remove(); previewMasks.delete(record.key); }
+  };
+  if (!animate) { finish(); return; }
+  record.animation = record.element.animate([{ transform: from }, { transform: to }], {
+    duration: 380, easing: 'cubic-bezier(0.22, 1, 0.36, 1)'
+  });
+  record.animation.onfinish = finish;
+}
+function renderMaskLayer() {
+  // Animate only the preview. Export always paints the complete final masks.
+  const newImage = previewLoadId !== state.loadId;
+  if (newImage) {
+    previewMasks.forEach(record => { if (record.animation) { record.animation.onfinish = null; record.animation.cancel(); } });
+    previewMasks.clear(); maskLayer.replaceChildren(); previewLoadId = state.loadId;
+  }
+  maskLayer.hidden = state.view !== 'protected';
+  const animate = !newImage && !maskLayer.hidden && !reducedMotion.matches;
+  const masks = [
+    ...state.fields.filter(field => field.hidden).map(field => ({ key: `field-${field.id}`, rect: field.rect })),
+    ...state.manual.map(mask => ({ key: `manual-${mask.id}`, rect: mask.rect }))
+  ];
+  const active = new Set(masks.map(mask => mask.key));
+  masks.forEach(({ key, rect: [x, y, width, height] }, index) => {
+    let record = previewMasks.get(key);
+    if (!record) {
+      const element = document.createElement('div'); element.className = 'preview-mask';
+      element.style.transform = 'scaleX(0)'; maskLayer.append(element);
+      record = { key, element, visible: false, animation: null }; previewMasks.set(key, record);
+    }
+    Object.assign(record.element.style, {
+      left: `${x / base.width * 100}%`, top: `${y / base.height * 100}%`,
+      width: `${width / base.width * 100}%`, height: `${height / base.height * 100}%`, zIndex: String(index)
+    });
+    transitionMask(record, true, animate);
+  });
+  previewMasks.forEach(record => { if (!active.has(record.key)) transitionMask(record, false, animate); });
+}
+reducedMotion.addEventListener('change', renderMaskLayer);
 function renderCanvas() {
-  drawImage(canvas, state.view === 'protected');
+  drawImage(canvas, false);
+  renderMaskLayer();
   $('canvasWrap').style.width = state.zoom ? `${base.width}px` : `min(100%, ${Math.min(395, 640 * base.width / base.height)}px)`;
   $('canvasStage').classList.toggle('zoomed', state.zoom);
   $('zoomButton').textContent = state.zoom ? 'Fit image' : 'Zoom to 100%';
