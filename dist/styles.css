@@ -115,6 +115,7 @@ h1 { font-family: Georgia, "Times New Roman", serif; font-weight: 400; font-size
 .canvas-stage { padding: 28px 24px; display: flex; justify-content: center; align-items: flex-start; flex: 1; min-height: 600px; overflow: hidden; background-image: radial-gradient(#ced9c2 .7px, transparent .7px); background-size: 14px 14px; }
 .canvas-wrap { position: relative; width: min(100%, 395px); box-shadow: 0 12px 36px #304b2510, 0 2px 6px #304b2508; border: 1px solid #e5ebdf; border-radius: 12px; overflow: hidden; background: white; line-height: 0; }
 canvas { display: block; width: 100%; height: auto; max-height: 640px; object-fit: contain; touch-action: pan-y; }
+canvas.mask-target { cursor: pointer; }
 .canvas-wrap.drawing { outline: 2px solid #498466; outline-offset: 3px; }
 .canvas-wrap.drawing canvas { cursor: crosshair; touch-action: none; }
 .draw-hint { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); background: var(--dark); color: white; padding: 10px 13px; font-size: 11px; border-radius: 7px; line-height: 1.5; white-space: nowrap; pointer-events: none; }

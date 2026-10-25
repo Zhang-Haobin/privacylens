@@ -142,6 +142,7 @@ function renderFields() {
   });
 }
 function render() {
+  showMaskTarget(null);
   renderCanvas(); renderFields();
   const isPublic = state.context === 'public'; const isSample = state.source === 'sample'; const count = countMasks();
   $('publicContext').classList.toggle('selected', isPublic); $('publicContext').setAttribute('aria-pressed', String(isPublic));
@@ -155,7 +156,8 @@ function render() {
   $('fileLabel').textContent = state.filename;
   $('originalView').classList.toggle('active', state.view === 'original'); $('originalView').setAttribute('aria-pressed', String(state.view === 'original'));
   $('protectedView').classList.toggle('active', state.view === 'protected'); $('protectedView').setAttribute('aria-pressed', String(state.view === 'protected'));
-  $('previewNote').textContent = state.view === 'original' ? 'Original preview — selected masks are still applied to export.' : (state.ocrDocument ? 'Check text edges. Add masks for missed text, QR codes, barcodes and faces.' : isSample ? 'Delivery status, item and timeline stay readable.' : 'Check every part of the image. Read text locally or add masks manually.');
+  $('canvasHint').textContent = state.drawing ? 'Drag to add a mask · Click “Add a mask” to stop' : state.view === 'original' ? 'Original preview · Switch to Protected to remove masks' : 'Click a mask to remove it · Solid masks on export';
+  $('previewNote').textContent = state.drawing ? 'Drag to cover a detail. Click “Add a mask” again or press Escape to remove masks.' : state.view === 'original' ? 'Original preview — selected masks are still applied to export.' : (state.ocrDocument ? 'Click a mask to reveal that detail. Check for missed text, codes and faces.' : isSample ? 'Click a mask to reveal that detail. Delivery status, item and timeline stay readable.' : 'Click a mask to reveal that detail. Check every part of the image.');
   $('preserveNote').querySelector('strong').textContent = isSample ? 'The useful part stays.' : 'Review the whole image.';
   $('preserveNote').querySelector('p').textContent = isSample ? 'Delivery status, product and dates help explain the delay.' : 'Sensitive details outside your masks will remain visible in the export.';
   $('undoButton').disabled = state.manual.length === 0;
@@ -173,13 +175,39 @@ let toastTimer;
 function announce(message) { const toast = $('toast'); toast.textContent = message; toast.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => { toast.hidden = true; }, 5800); }
 function setDrawing(enabled) { state.drawing = enabled; state.drag = null; $('canvasWrap').classList.toggle('drawing', enabled); $('drawButton').setAttribute('aria-pressed', String(enabled)); $('drawHint').hidden = !enabled; if (enabled) state.view = 'protected'; }
 function point(event) { const r = canvas.getBoundingClientRect(); return [Math.max(0, Math.min(base.width, (event.clientX - r.left) * base.width / r.width)), Math.max(0, Math.min(base.height, (event.clientY - r.top) * base.height / r.height))]; }
+function maskAtPoint([x, y]) {
+  if (state.drawing || state.view !== 'protected') return null;
+  const contains = ({ rect: [left, top, width, height] }) => x >= left && x < left + width && y >= top && y < top + height;
+  // Match paint order: remove only the topmost mask when regions overlap.
+  const manual = state.manual.findLast(contains);
+  if (manual) return { manual, name: `Manual mask ${manual.id}` };
+  const field = state.fields.findLast(field => field.hidden && contains(field));
+  return field ? { field, name: field.name } : null;
+}
+function showMaskTarget(target) {
+  canvas.classList.toggle('mask-target', Boolean(target));
+  if (target) canvas.title = `Click to remove: ${target.name}`;
+  else canvas.removeAttribute('title');
+}
 function dragRect() { const { start, end } = state.drag; return [Math.floor(Math.min(start[0], end[0])), Math.floor(Math.min(start[1], end[1])), Math.ceil(Math.abs(end[0] - start[0])), Math.ceil(Math.abs(end[1] - start[1]))]; }
+canvas.addEventListener('click', event => {
+  const target = maskAtPoint(point(event));
+  if (!target) return;
+  if (target.manual) state.manual = state.manual.filter(mask => mask !== target.manual);
+  else { target.field.hidden = false; if (state.highlighted === target.field.id) state.highlighted = null; }
+  render();
+  announce(`Removed: ${target.name}. Review the preview before exporting.`);
+});
 canvas.addEventListener('pointerdown', event => {
   if (!state.drawing) return;
   if (event.pointerType === 'mouse' && event.button !== 0) return;
   event.preventDefault(); canvas.setPointerCapture(event.pointerId); const p = point(event); state.drag = { start: p, end: p }; $('drawHint').hidden = true;
 });
-canvas.addEventListener('pointermove', event => { if (!state.drag) return; state.drag.end = point(event); renderCanvas(); });
+canvas.addEventListener('pointermove', event => {
+  if (!state.drag) { showMaskTarget(maskAtPoint(point(event))); return; }
+  state.drag.end = point(event); renderCanvas();
+});
+canvas.addEventListener('pointerleave', () => showMaskTarget(null));
 canvas.addEventListener('pointerup', event => {
   if (!state.drag) return;
   state.drag.end = point(event); const rect = dragRect();

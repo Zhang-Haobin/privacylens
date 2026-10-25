@@ -1,5 +1,12 @@
 # Verification record
 
+## Click to remove masks — 26 October 2026
+
+- Protected preview now removes the clicked mask, updates suggested-field switches and mask totals, and offers a pointer cursor and hover tooltip. Original preview and drawing mode do not remove masks.
+- Local browser checks: clicking the sample name mask restored the name and changed its switch to Keep (6 to 5 masks); drawing a manual mask over the phone increased the count, then clicking removed only that manual mask while the phone stayed covered. Original preview clicks retained all masks. At 100% zoom, clicking the order mask changed its switch to Keep. Export preview showed that order number with the other five masks intact.
+- `npm test`: all 27 existing tests passed; `node --check dist/app.js` passed. No live OCR or provider call was needed for this interaction change. Touch input was not separately tested on a physical device.
+- Export preview screenshot: local `qa/click-remove-export.png`. Changes verified locally; no production deployment performed.
+
 ## Local OCR + AI text classification — 25 October 2026
 
 - Implemented local OCR, optional ID-based AI text classification, same-origin vendored English / Traditional Chinese / Simplified Chinese models, cancellation, original-size zoom and field-location highlighting. The webpage no longer sends images to AI.
