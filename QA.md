@@ -1,5 +1,13 @@
 # Verification record
 
+## Detection output format fix — 25 October 2026
+
+- Added a strict Chat Completions JSON schema for category/box output. The fixed model, disabled reasoning and 2048 completion-token cap are unchanged; there is no automatic retry or model fallback.
+- Compatible-response parsing accepts one complete JSON object wrapped in Markdown or explanatory text, including split text content parts. It rejects malformed, truncated or competing objects without attempting to repair or partially apply them. All coordinate validation remains in place.
+- Model refusal and output-limit responses now have distinct messages. Provider output is not echoed to the user or logged.
+- `npm test`: all 14 tests passed, including wrapper parsing, text content parts, partial/ambiguous JSON rejection, no automatic retries, refusal/output-limit handling and the fixed-model restriction.
+- One live call through the local server to novacode with the built-in fictional order accepted the new schema and returned seven valid regions (the address appeared as two regions). No user-uploaded screenshot was used. This validates one service response, not the unknown response that triggered the user's original error or general detection accuracy.
+
 ## Visual refresh — 25 October 2026
 
 - Removed the rotated privacy notice; it now aligns horizontally on desktop and appears as a full-width card on mobile.

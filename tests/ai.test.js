@@ -38,6 +38,13 @@ test('passes the image through the server using the configured OpenAI-compatible
       assert.equal(url, 'https://ai.novacode.top/v1/chat/completions');
       const body = JSON.parse(options.body);
       assert.equal(body.model, 'gpt-6-luna');
+      assert.equal(body.response_format.type, 'json_schema');
+      assert.equal(body.response_format.json_schema.strict, true);
+      const schema = body.response_format.json_schema.schema;
+      assert.equal(schema.additionalProperties, false);
+      assert.deepEqual(schema.required, ['fields']);
+      assert.equal(schema.properties.fields.items.properties.box.minItems, 4);
+      assert.equal(schema.properties.fields.items.properties.box.maxItems, 4);
       assert.equal(options.headers.Authorization, `Bearer ${env.OPENAI_API_KEY}`);
       assert.equal(options.redirect, 'error');
       assert.equal(body.messages[1].content[1].image_url.url, image);
@@ -118,6 +125,53 @@ test('does not silently drop invalid model regions or accept truncated completio
   }
   assert.equal((await handleAI(request(), { env, fetchImpl: async () => completion([field], 'length') })).status, 502);
   assert.equal((await handleAI(request(), { env, fetchImpl: async () => Response.json({ choices: [{ message: { content: 'not json' } }] }) })).status, 502);
+});
+
+test('reads a complete JSON object surrounded by Markdown or commentary', async () => {
+  const json = JSON.stringify({ fields: [field] });
+  for (const content of [json, `\ufeff${json}`, `\`\`\`json\n${json}\n\`\`\``, `Detected regions:\n\`\`\`JSON\n${json}\n\`\`\`\nPlease review each mask.`]) {
+    let calls = 0;
+    const response = await handleAI(request(), { env, fetchImpl: async () => {
+      calls++; return Response.json({ choices: [{ finish_reason: 'stop', message: { content } }] });
+    } });
+    assert.equal(response.status, 200);
+    assert.equal((await response.json()).fields.length, 1);
+    assert.equal(calls, 1);
+  }
+});
+
+test('handles text content parts without mixing in non-text output', async () => {
+  const content = JSON.stringify({ fields: [field] });
+  const response = await handleAI(request(), { env, fetchImpl: async () => Response.json({ choices: [{ finish_reason: 'stop', message: {
+    content: [{ type: 'text', text: content.slice(0, 15) }, { type: 'text', text: content.slice(15) }]
+  } }] }) });
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).fields.length, 1);
+});
+
+test('rejects malformed, partial and ambiguous JSON without repairing boxes or automatically retrying', async () => {
+  const json = JSON.stringify({ fields: [field] });
+  for (const content of [json.slice(0, -1), `${json}\n${json}`, '{"fields":[{"category":"phone","box":[0,0,0.2,0.1]},]}', 'Result: {broken} then ' + json, 'I could not locate details.']) {
+    let calls = 0;
+    const response = await handleAI(request(), { env, fetchImpl: async () => {
+      calls++; return Response.json({ choices: [{ finish_reason: 'stop', message: { content } }] });
+    } });
+    assert.equal(response.status, 502);
+    assert.match((await response.json()).error, /Existing masks were retained/);
+    assert.equal(calls, 1);
+  }
+});
+
+test('distinguishes output limits and refusals without echoing provider content', async () => {
+  const limited = await handleAI(request(), { env, fetchImpl: async () => completion([field], 'length') });
+  assert.match((await limited.json()).error, /output limit/);
+  const refused = await handleAI(request(), { env, fetchImpl: async () => Response.json({ choices: [{ finish_reason: 'stop', message: {
+    refusal: 'Private upstream message must not be echoed', content: null
+  } }] }) });
+  const refusedBody = await refused.json();
+  assert.equal(refused.status, 502);
+  assert.match(refusedBody.error, /declined/);
+  assert.ok(!JSON.stringify(refusedBody).includes('Private upstream message'));
 });
 
 test('maps quota, authentication, invalid model and timeouts without echoing upstream private data', async () => {
