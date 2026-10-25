@@ -1,13 +1,25 @@
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { handleAI } from './lib/ai.js';
+import { readdir } from 'node:fs/promises';
 
 const files = new Map([
   ['/', ['index.html', 'text/html; charset=utf-8']],
   ['/index.html', ['index.html', 'text/html; charset=utf-8']],
   ['/app.js', ['app.js', 'text/javascript; charset=utf-8']],
+  ['/ocr.js', ['ocr.js', 'text/javascript; charset=utf-8']],
+  ['/ocr-core.js', ['ocr-core.js', 'text/javascript; charset=utf-8']],
   ['/styles.css', ['styles.css', 'text/css; charset=utf-8']]
 ]);
+// Explicitly inventory public OCR assets; never expose arbitrary filesystem paths.
+async function addAssets(directory = 'vendor/ocr') {
+  for (const entry of await readdir(new URL(`./dist/${directory}/`, import.meta.url), { withFileTypes: true })) {
+    const path = `${directory}/${entry.name}`;
+    if (entry.isDirectory()) await addAssets(path);
+    else files.set(`/${path}`, [path, path.endsWith('.js') ? 'text/javascript; charset=utf-8' : path.endsWith('.gz') ? 'application/gzip' : 'text/plain; charset=utf-8']);
+  }
+}
+await addAssets();
 const port = Number(process.env.PORT || 4173);
 createServer(async (incoming, outgoing) => {
   try {

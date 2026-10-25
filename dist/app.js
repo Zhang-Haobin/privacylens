@@ -1,12 +1,13 @@
+import { recognizeLocal } from './ocr.js';
+import { localSuggestions, suggestionsToFields, textPayload, validateClassifications, shouldHide } from './ocr-core.js';
 const $ = (id) => document.getElementById(id);
 const canvas = $('previewCanvas');
 const ctx = canvas.getContext('2d');
 const base = document.createElement('canvas');
 const b = base.getContext('2d');
-const state = { context: 'public', source: 'sample', view: 'protected', drawing: false, fields: [], manual: [], drag: null, filename: 'fictional-order.png', nextId: 1, loadId: 0, aiDetected: false, detecting: false, detectedModel: '' };
+const state = { context: 'public', source: 'sample', view: 'protected', drawing: false, fields: [], manual: [], drag: null, filename: 'fictional-order.png', nextId: 1, loadId: 0, aiDetected: false, detecting: false, detectedModel: '', ocrDocument: null, phase: '', zoom: false, highlighted: null };
 let detectionController = null;
 let detectionId = 0;
-const categoryNames = { order: 'Order / tracking number', name: 'Personal name', phone: 'Phone number', address: 'Address', email: 'Email address', payment: 'Payment details', id: 'Identity document', account: 'Account identifier', code: 'QR code / barcode', face: 'Identifiable face', other: 'Sensitive detail' };
 const sampleFields = [
   { id: 'order', name: 'Order number', rect: [492, 149, 216, 35], publicReason: 'Not needed to ask a public audience about a delay.', supportReason: 'Helps official support find this specific order.' },
   { id: 'name', name: 'Full name', rect: [60, 621, 250, 37], publicReason: 'Identifies you without explaining the delivery issue.', supportReason: 'Not needed for this initial delivery-status enquiry.' },
@@ -57,29 +58,29 @@ function drawSample() {
   txt('FICTIONAL SAMPLE  /  FOR DEMONSTRATION ONLY', 155, 994, 13, '#b1b7a9', 500);
 }
 
-function recommendedHidden(field) { return state.context === 'public' || (field.category || field.id) !== 'order'; }
+function recommendedHidden(field) { return shouldHide(field, state.context); }
 function resetFields() {
-  if (state.aiDetected) { state.fields.forEach(field => { field.hidden = recommendedHidden(field); }); return; }
+  if (state.ocrDocument || state.fields.some(field => field.id.startsWith('ocr-'))) { state.fields.forEach(field => { field.hidden = recommendedHidden(field); }); return; }
   state.fields = state.source === 'sample' ? sampleFields.map(f => ({ ...f, hidden: recommendedHidden(f) })) : [];
 }
 function cancelDetection() {
-  detectionId++; detectionController?.abort(); detectionController = null; state.detecting = false;
+  detectionId++; detectionController?.abort(); detectionController = null; state.detecting = false; state.phase = '';
 }
 function clearDetection() {
-  cancelDetection(); state.aiDetected = false; state.detectedModel = ''; $('aiConsent').checked = false;
-  setAIStatus('Your image stays local until you choose AI detection.');
+  cancelDetection(); state.aiDetected = false; state.detectedModel = ''; state.ocrDocument = null; state.highlighted = null; state.zoom = false; $('aiConsent').checked = false;
+  setAIStatus('Start with local text recognition. Nothing is sent to AI until you choose classification.');
 }
 function setSample() {
   state.loadId++;
   clearDetection();
-  state.source = 'sample'; state.filename = 'fictional-order.png'; state.manual = []; state.nextId = 1; state.view = 'protected'; state.drag = null;
+  state.source = 'sample'; state.filename = 'fictional-order.png'; state.fields = []; state.manual = []; state.nextId = 1; state.view = 'protected'; state.drag = null;
   setDrawing(false); drawSample(); resetFields(); render();
 }
 function setContext(context) {
   if (state.context === context) return;
   state.context = context; state.drag = null;
   resetFields(); render();
-  announce(state.aiDetected ? 'Sharing recommendations reapplied to detected fields. Manual masks retained. Review every suggestion.' : state.source === 'sample' ? (context === 'support' ? 'Support recommendations applied. Order number stays visible. Other sample fields stay masked.' : 'Public recommendations applied. All six sample fields are masked.') : 'Context changed. Your manual masks are retained. Run AI detection or add masks manually.');
+  announce(state.ocrDocument ? 'Sharing recommendations reapplied. Field switches reset; hand-drawn masks retained. Review every suggestion.' : state.source === 'sample' ? (context === 'support' ? 'Support recommendations applied. Order number stays visible. Other sample fields stay masked.' : 'Public recommendations applied. All six sample fields are masked.') : 'Context changed. Your manual masks are retained. Read text locally or add masks manually.');
 }
 function drawImage(target, includeMasks = true) {
   target.width = base.width; target.height = base.height;
@@ -91,7 +92,14 @@ function drawImage(target, includeMasks = true) {
 }
 function renderCanvas() {
   drawImage(canvas, state.view === 'protected');
-  $('canvasWrap').style.width = `min(100%, ${Math.min(395, 640 * base.width / base.height)}px)`;
+  $('canvasWrap').style.width = state.zoom ? `${base.width}px` : `min(100%, ${Math.min(395, 640 * base.width / base.height)}px)`;
+  $('canvasStage').classList.toggle('zoomed', state.zoom);
+  $('zoomButton').textContent = state.zoom ? 'Fit image' : 'Zoom to 100%';
+  $('zoomButton').setAttribute('aria-pressed', String(state.zoom));
+  if (state.highlighted && state.view === 'protected') {
+    const field = state.fields.find(f => f.id === state.highlighted);
+    if (field) { ctx.strokeStyle = '#e7b71e'; ctx.lineWidth = Math.max(3, base.width / 220); ctx.strokeRect(...field.rect); }
+  }
   if (state.drag) {
     const r = dragRect(); ctx.fillStyle = '#202b24'; ctx.fillRect(...r); ctx.strokeStyle = '#c6db7a'; ctx.lineWidth = Math.max(2, base.width / 350); ctx.strokeRect(...r);
   }
@@ -100,12 +108,17 @@ function countMasks() { return state.fields.filter(f => f.hidden).length + state
 function renderFields() {
   const list = $('fieldList'); list.replaceChildren();
   if (state.fields.length === 0) {
-    const p = document.createElement('p'); p.className = 'empty-fields'; p.textContent = state.aiDetected ? 'The model returned no sensitive regions. This does not mean the image is safe. Review the whole image and add masks for anything it missed.' : 'No detection has been run on this image. Use optional AI detection or select “Add a mask” and cover details manually.'; list.append(p);
+    const p = document.createElement('p'); p.className = 'empty-fields'; p.textContent = state.ocrDocument ? 'No suggestions are available. This does not mean the image is safe. Classify the text with AI or add masks for anything missed.' : 'Read text locally, or select “Add a mask” and cover details manually.'; list.append(p);
   }
   state.fields.forEach(field => {
     const row = document.createElement('div'); row.className = 'field-row'; row.id = `field-${field.id}`;
     const top = document.createElement('div'); top.className = 'field-top';
-    const title = document.createElement('span'); title.className = 'field-name';
+    const title = document.createElement('button'); title.type = 'button'; title.className = 'field-name field-locate'; title.setAttribute('aria-label', `Locate ${field.name.toLowerCase()}`);
+    title.addEventListener('click', () => {
+      state.highlighted = field.id; state.view = 'protected'; state.zoom = true; renderCanvas();
+      $('canvasStage').scrollIntoView({ block: 'center', behavior: 'smooth' });
+      const [x, y, w, h] = field.rect; $('canvasStage').scrollLeft = Math.max(0, x + w / 2 - $('canvasStage').clientWidth / 2); $('canvasStage').scrollTop = Math.max(0, y + h / 2 - $('canvasStage').clientHeight / 2);
+    });
     const dot = document.createElement('span'); dot.className = `field-dot ${field.hidden ? '' : 'keep'}`;
     title.append(dot, document.createTextNode(field.name));
     const label = document.createElement('label'); label.className = 'field-switch';
@@ -135,19 +148,23 @@ function render() {
   $('supportContext').classList.toggle('selected', !isPublic); $('supportContext').setAttribute('aria-pressed', String(!isPublic));
   $('sampleButton').classList.toggle('selected', isSample);
   $('contextExplanation').querySelector('p').textContent = isPublic ? 'A public post needs the delivery status, but not the details that identify you or your order.' : 'For this initial delivery enquiry, official support needs the order number. Other personal details stay masked unless you choose otherwise.';
-  $('reviewIntro').textContent = state.aiDetected ? `AI suggestions for ${isPublic ? 'a public post' : 'official support'}. Review the positions, add missed masks and toggle any field.` : isSample ? `Suggested masks for ${isPublic ? 'a public post' : 'official support'}. Toggle any field to change it.` : 'Your image, your choices. Run optional AI detection or add masks manually.';
-  $('demoNotice').textContent = state.detecting ? 'Detection is running. Existing masks are retained until a valid result arrives.' : state.aiDetected ? `AI detection: ${state.detectedModel}. Suggested boxes may be inaccurate or incomplete.` : isSample ? 'Sample fields are pre-labelled. AI detection is optional.' : 'No AI detection has been run on this image.';
+  $('reviewIntro').textContent = state.ocrDocument ? `${state.aiDetected ? 'OCR + AI' : 'Local OCR'} suggestions for ${isPublic ? 'a public post' : 'official support'}. Click a field to locate it; toggle to change it.` : isSample ? `Suggested masks for ${isPublic ? 'a public post' : 'official support'}. Toggle any field to change it.` : 'Read text locally, optionally classify it with AI, and check every part of the image.';
+  $('demoNotice').textContent = state.detecting ? 'Detection is running. Earlier masks stay until new suggestions are ready.' : state.ocrDocument ? (state.aiDetected ? `Text classified by ${state.detectedModel}; positions from local OCR. Check for missed text and codes.` : 'Local rules only: names and addresses still need AI classification or manual masks. Earlier masks retained.') : isSample ? 'Sample fields are pre-labelled. OCR and AI are optional.' : 'No text recognition has been run on this image.';
   $('maskCount').textContent = String(count);
   $('summaryText').textContent = `${count} ${count === 1 ? 'mask' : 'masks'} applied`;
   $('fileLabel').textContent = state.filename;
   $('originalView').classList.toggle('active', state.view === 'original'); $('originalView').setAttribute('aria-pressed', String(state.view === 'original'));
   $('protectedView').classList.toggle('active', state.view === 'protected'); $('protectedView').setAttribute('aria-pressed', String(state.view === 'protected'));
-  $('previewNote').textContent = state.view === 'original' ? 'Original preview — selected masks are still applied to export.' : (state.aiDetected ? 'Check all suggested boxes and add masks for missed details.' : isSample ? 'Delivery status, item and timeline stay readable.' : 'Check every part of the image. Use AI or add masks manually.');
+  $('previewNote').textContent = state.view === 'original' ? 'Original preview — selected masks are still applied to export.' : (state.ocrDocument ? 'Check text edges. Add masks for missed text, QR codes, barcodes and faces.' : isSample ? 'Delivery status, item and timeline stay readable.' : 'Check every part of the image. Read text locally or add masks manually.');
   $('preserveNote').querySelector('strong').textContent = isSample ? 'The useful part stays.' : 'Review the whole image.';
   $('preserveNote').querySelector('p').textContent = isSample ? 'Delivery status, product and dates help explain the delay.' : 'Sensitive details outside your masks will remain visible in the export.';
   $('undoButton').disabled = state.manual.length === 0;
-  $('detectButton').disabled = state.detecting || !$('aiConsent').checked;
-  $('detectButton').textContent = state.detecting ? 'Detecting…' : 'Detect sensitive details';
+  $('ocrButton').disabled = state.detecting;
+  $('ocrButton').textContent = state.phase === 'ocr' ? 'Reading text…' : 'Read text locally';
+  $('ocrLanguage').disabled = state.detecting;
+  $('detectButton').disabled = state.detecting || !$('aiConsent').checked || !state.ocrDocument?.words.length;
+  $('detectButton').textContent = state.phase === 'ai' ? 'Classifying…' : 'Classify text with AI';
+  $('cancelDetectionButton').hidden = !state.detecting;
   $('exportButton').disabled = state.detecting;
   $('aiConsent').disabled = state.detecting;
   canvas.setAttribute('aria-label', `${isSample ? 'Fictional order screenshot' : 'Your uploaded screenshot'}, ${state.view === 'original' ? 'original view' : `${count} masks applied`}`);
@@ -193,7 +210,7 @@ $('fileInput').addEventListener('change', async event => {
     if (!image.naturalWidth || image.naturalWidth * image.naturalHeight > 20000000) throw new Error('size');
     base.width = image.naturalWidth; base.height = image.naturalHeight; b.fillStyle = '#fff'; b.fillRect(0, 0, base.width, base.height); b.drawImage(image, 0, 0);
     clearDetection(); state.source = 'upload'; state.filename = file.name; state.fields = []; state.manual = []; state.nextId = 1; state.view = 'protected'; setDrawing(false); render();
-    announce('Image opened locally. Choose AI detection to send it for analysis, or add masks manually.');
+    announce('Image opened locally. Read text on this device or add masks manually. AI text classification is optional.');
   } catch(error) { if (loadId === state.loadId) announce(error.message === 'size' ? 'Image is too large to edit here (20 megapixels maximum).' : 'This image could not be opened. Please try another PNG, JPEG or WebP.'); }
   finally { URL.revokeObjectURL(url); event.target.value = ''; }
 });
@@ -206,48 +223,64 @@ async function readAPI(response) {
   return result;
 }
 $('aiConsent').addEventListener('change', render);
-function detectionImage() {
-  const output = document.createElement('canvas');
-  let scale = Math.min(1, 2400 / Math.max(base.width, base.height));
-  for (let attempt = 0; attempt < 5; attempt++) {
-    output.width = Math.max(1, Math.round(base.width * scale)); output.height = Math.max(1, Math.round(base.height * scale));
-    output.getContext('2d').drawImage(base, 0, 0, output.width, output.height);
-    const image = output.toDataURL('image/jpeg', 0.9);
-    if (image.length < 3_700_000) return { image, width: output.width, height: output.height };
-    scale *= 0.75;
-  }
-  throw new Error('Could not shrink the image enough for detection. Choose a smaller screenshot.');
+function mergeLocalFields(previous, added) {
+  const merged = [...previous.map(f => ({ ...f, category: f.category || f.id })), ...added];
+  return merged.filter((field, i) => !merged.slice(0, i).some(f => f.category === field.category && f.rect.every((n, k) => n === field.rect[k])))
+    .map((field, i) => ({ ...field, id: `ocr-${i + 1}`, hidden: field.hidden ?? recommendedHidden(field) }));
 }
-$('detectButton').addEventListener('click', async () => {
-  if (state.detecting || !$('aiConsent').checked) return;
+$('zoomButton').addEventListener('click', () => { state.zoom = !state.zoom; renderCanvas(); });
+$('cancelDetectionButton').addEventListener('click', () => { cancelDetection(); render(); setAIStatus('Detection cancelled. Earlier masks retained. A sent AI request may still finish at the provider.'); });
+$('ocrLanguage').addEventListener('change', () => {
+  state.ocrDocument = null; state.aiDetected = false; state.detectedModel = ''; $('aiConsent').checked = false;
+  render(); setAIStatus('Language changed. Earlier masks retained. Read the text again before AI classification.');
+});
+$('ocrButton').addEventListener('click', async () => {
+  if (state.detecting) return;
   const currentId = ++detectionId; const loadId = state.loadId;
   const controller = new AbortController(); detectionController = controller;
-  const timeout = setTimeout(() => controller.abort(), 55_000);
-  state.detecting = true; setDrawing(false); render(); setAIStatus('Sending an unmasked, resized copy to the configured AI provider…');
+  const timeout = setTimeout(() => controller.abort(), 90_000);
+  state.detecting = true; state.phase = 'ocr'; setDrawing(false); render();
+  setAIStatus('Loading local text recognition. Models are loaded from this site; your image stays on this device.');
   try {
-    const payload = { ...detectionImage(), consent: true };
-    const result = await readAPI(await fetch('/api/ai?action=detect', {
+    const document = await recognizeLocal(base, { language: $('ocrLanguage').value, signal: controller.signal, onProgress: message => {
+      if (currentId === detectionId && loadId === state.loadId) setAIStatus(`Local OCR · ${message.status}${Number.isFinite(message.progress) ? ` · ${Math.round(message.progress * 100)}%` : ''}`);
+    } });
+    if (currentId !== detectionId || loadId !== state.loadId || controller.signal.aborted) return;
+    const suggestions = suggestionsToFields(localSuggestions(document), document);
+    state.fields = mergeLocalFields(state.fields, suggestions); state.ocrDocument = document; state.aiDetected = false; state.detectedModel = ''; state.view = 'protected'; state.highlighted = null;
+    setAIStatus(`${document.words.length} text words read locally. ${suggestions.length} local mask suggestions added; earlier masks retained. ${document.words.length ? 'Review names and addresses manually or opt in to AI text classification.' : 'No text found: add masks manually. This does not mean the image is safe.'}`);
+  } catch (error) {
+    if (currentId === detectionId && loadId === state.loadId) setAIStatus(error.name === 'AbortError' ? 'Local OCR timed out. Earlier masks retained; try a smaller image.' : error.message, true);
+  } finally {
+    clearTimeout(timeout);
+    if (currentId === detectionId) { state.detecting = false; state.phase = ''; detectionController = null; render(); }
+  }
+});
+$('detectButton').addEventListener('click', async () => {
+  if (state.detecting || !$('aiConsent').checked || !state.ocrDocument?.words.length) return;
+  const currentId = ++detectionId; const loadId = state.loadId;
+  const document = state.ocrDocument;
+  const controller = new AbortController(); detectionController = controller;
+  const timeout = setTimeout(() => controller.abort(), 55_000);
+  state.detecting = true; state.phase = 'ai'; setDrawing(false); render(); setAIStatus('Sending recognized text and its layout to the configured AI provider. The image stays on this device…');
+  try {
+    const payload = textPayload(document);
+    const result = await readAPI(await fetch('/api/ai?action=classify-text', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), signal: controller.signal
     }));
-    if (currentId !== detectionId || loadId !== state.loadId) return;
-    state.fields = result.fields.map(field => {
-      const [x, y, w, h] = field.box;
-      // Add a small margin and scale normalized boxes back to the original canvas.
-      const left = Math.max(0, Math.floor(x * base.width) - 5); const top = Math.max(0, Math.floor(y * base.height) - 5);
-      const right = Math.min(base.width, Math.ceil((x + w) * base.width) + 5); const bottom = Math.min(base.height, Math.ceil((y + h) * base.height) + 5);
-      return { id: field.id, category: field.category, name: categoryNames[field.category] || 'Sensitive detail', rect: [left, top, right - left, bottom - top],
-        publicReason: 'AI marked this as personal or identifying information. Check the box covers it fully.',
-        supportReason: field.category === 'order' ? 'Can help verified official support locate this order. Check the recipient and value before keeping it visible.' : 'Not needed for an initial delivery-status enquiry. Check the suggested box.',
-        hidden: recommendedHidden(field) };
-    });
-    state.aiDetected = true; state.detectedModel = result.model; state.view = 'protected';
-    setAIStatus(`${result.fields.length} suggested regions from ${result.provider}. Check every box and add masks for missed details.`);
-    announce('AI suggestions ready. Review the entire image; detection can miss details.');
+    if (currentId !== detectionId || loadId !== state.loadId || controller.signal.aborted) return;
+    const classified = validateClassifications(result.fields, document);
+    const fields = suggestionsToFields([...classified, ...localSuggestions(document)], document);
+    // Build everything first: an invalid result cannot partially replace existing masks.
+    state.fields = fields.map(field => ({ ...field, hidden: recommendedHidden(field) }));
+    state.aiDetected = true; state.detectedModel = result.model; state.view = 'protected'; state.highlighted = null;
+    setAIStatus(`${fields.length} OCR-positioned mask suggestions, with text classification from ${result.provider}. Check missed text, QR codes and barcodes.`);
+    announce('Text classification ready. Positions come from local OCR. Review the whole image.');
   } catch (error) {
     if (currentId === detectionId && loadId === state.loadId) setAIStatus(error.name === 'AbortError' ? 'Detection timed out. Existing masks retained; retry or add masks manually.' : error.message, true);
   } finally {
     clearTimeout(timeout);
-    if (currentId === detectionId) { state.detecting = false; detectionController = null; render(); }
+    if (currentId === detectionId) { state.detecting = false; state.phase = ''; detectionController = null; render(); }
   }
 });
 $('aboutButton').addEventListener('click', () => $('aboutDialog').showModal());
@@ -265,7 +298,7 @@ $('exportButton').addEventListener('click', async () => {
     exportUrl = URL.createObjectURL(exportBlob); $('exportPreview').src = exportUrl;
     $('exportContext').textContent = state.context === 'public' ? 'For a public post about a delivery delay. Check that no identifying details remain visible.' : 'For verified official support to locate this order. Check the recipient before sharing.';
     const kept = state.fields.filter(f => !f.hidden).map(f => f.name.toLowerCase());
-    $('exportDetails').textContent = `${countMasks()} solid ${countMasks() === 1 ? 'mask' : 'masks'} applied. ${state.aiDetected ? `AI suggestions from ${state.detectedModel} may miss details or place boxes incorrectly. ${kept.length ? `Kept visible: ${kept.join(', ')}.` : ''}` : state.source === 'sample' ? (kept.length ? `Visible personal fields: ${kept.join(', ')}.` : 'All six labelled personal fields are covered.') : 'Uploaded image: no AI detection was performed.'} ${countMasks() === 0 ? 'There are no redactions on this copy.' : ''}`;
+    $('exportDetails').textContent = `${countMasks()} solid ${countMasks() === 1 ? 'mask' : 'masks'} applied. ${state.ocrDocument ? `${state.aiDetected ? `Text classification: ${state.detectedModel}.` : 'Local OCR rules only: names and addresses may still be visible.'} OCR can miss text. Check all edges, QR codes, barcodes and faces. ${kept.length ? `Kept visible: ${kept.join(', ')}.` : ''}` : state.source === 'sample' ? (kept.length ? `Visible personal fields: ${kept.join(', ')}.` : 'All six labelled personal fields are covered.') : 'No current OCR classification is available. Review every part of the image.'} ${countMasks() === 0 ? 'There are no redactions on this copy.' : ''}`;
     $('reviewConfirmation').checked = false; $('downloadButton').disabled = true; $('exportDialog').showModal();
   } catch { announce('Could not prepare the image. Please try again with a smaller image.'); }
   finally { button.disabled = false; }

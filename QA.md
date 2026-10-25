@@ -1,5 +1,13 @@
 # Verification record
 
+## Local OCR + AI text classification — 25 October 2026
+
+- Implemented local OCR, optional ID-based AI text classification, same-origin vendored English / Traditional Chinese / Simplified Chinese models, cancellation, original-size zoom and field-location highlighting. The webpage no longer sends images to AI.
+- `npm test`: all 27 tests passed. JavaScript syntax and `git diff --check` passed.
+- Eight live text-classification calls passed strict ID validation. Targeted checks covered Amazon phone suffixes, three SF tracking-number occurrences, PayPal transaction ID, DHL postal code and FedEx email. QR/barcodes still need manual masks.
+- Browser checks verified OCR cancellation/retry, generated masks, hand-drawn mask retention, context changes, backend failure retaining masks, export confirmation and protected export from Original view.
+- Detailed methods, measurements and images are retained locally in `qa/ocr-integration/`, outside the published source. This entry records local pre-deployment verification; older records below describe earlier versions.
+
 ## Detection output format fix — 25 October 2026
 
 - Added a strict Chat Completions JSON schema for category/box output. The fixed model, disabled reasoning and 2048 completion-token cap are unchanged; there is no automatic retry or model fallback.

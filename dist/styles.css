@@ -79,6 +79,15 @@ h1 { font-family: Georgia, "Times New Roman", serif; font-weight: 400; font-size
 .ai-consent input { width: 15px; height: 15px; flex-shrink: 0; margin: 3px 0 0; accent-color: var(--green); }
 .ai-status { color: #486d47; margin-top: 13px; padding-top: 11px; border-top: 1px solid #e0e7d8; }
 .ai-status[data-error=true] { color: #994b2e; }
+.ocr-language { display: block; margin: 12px 0; font-size: 11px; color: #52664d; }
+.ocr-language select { display: block; width: 100%; margin-top: 6px; padding: 9px; border: 1px solid #cbd8c3; border-radius: 6px; background: white; color: #273b32; }
+#cancelDetectionButton { margin-top: 10px; width: 100%; }
+#cancelDetectionButton[hidden] { display: none; }
+.field-locate { border: 0; background: transparent; text-align: left; padding: 0; cursor: pointer; }
+.field-locate:hover { text-decoration: underline; }
+.canvas-stage.zoomed { display: block; overflow: auto; max-height: 680px; min-height: 320px; }
+.canvas-stage.zoomed .canvas-wrap { max-width: none; flex-shrink: 0; }
+.canvas-stage.zoomed canvas { max-height: none; }
 .panel-divider { height: 1px; background: var(--line); margin: 28px 0; }
 .context-options { display: grid; gap: 10px; margin-top: 18px; }
 .context-card { background: white; border: 1px solid #dfe6d9; border-radius: 10px; text-align: left; display: flex; align-items: center; gap: 10px; padding: 15px 11px; width: 100%; }
@@ -96,7 +105,7 @@ h1 { font-family: Georgia, "Times New Roman", serif; font-weight: 400; font-size
 .context-explanation p { font-size: 11px; color: #748367; line-height: 1.9; margin-top: 7px; }
 .local-note { display: flex; gap: 10px; color: #7f9073; font-size: 11px; line-height: 1.8; margin: 23px 2px 0; }
 .local-note svg { width: 18px; height: 18px; margin-top: 3px; }
-.preview-panel { background: #f0f4eb; display: flex; flex-direction: column; min-width: 0; }
+.preview-panel { background: #f0f4eb; display: flex; flex-direction: column; min-width: 0; align-self: start; width: 100%; }
 .preview-header { display: flex; justify-content: space-between; align-items: center; padding: 25px 22px 21px; gap: 12px; border-bottom: 1px solid #e1e8d9; background: #f4f7f0; }
 .preview-header h2 { font-size: 15px; margin: 0 0 5px; letter-spacing: -.3px; }
 .preview-header > div > span { display: block; font-size: 11px; color: #819174; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
