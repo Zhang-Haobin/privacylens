@@ -1,5 +1,12 @@
 # Verification record
 
+## Visible wipe correction — 26 October 2026
+
+- Compared production JS/CSS against local SHA-256 hashes: Vercel was already serving commit `26152d2`. Deployment lag was ruled out. The user reported that masks changed without a visible wipe; the precise cause in their browser was not established.
+- Replaced the Web Animations transform with a 600 ms requestAnimationFrame clip-path wipe. Added an Animation on/off control so a reduced-motion default is visible and can be explicitly overridden.
+- Added five scheduler-controlled tests for intermediate frames in both directions, rapid reversal, immediate animation-off completion, and stale-frame cancellation when changing images. All 32 tests passed, along with syntax and diff checks.
+- Browser checks captured an actual partially retracted name mask and consecutive covering/removal frames; the field switch and count reached the correct final selection. Recording: local `qa/mask-wipe-fixed.gif`. The correction is local and has not been pushed/deployed.
+
 ## Mask wipe animation — 26 October 2026
 
 - Preview masks now use a separate, non-interactive DOM layer with a 380 ms eased horizontal scale: covering grows from the left, removal shrinks toward the left. Export still draws complete masks directly into a separate canvas from final state. New image loads clear pending animations; reduced-motion preferences apply changes immediately.

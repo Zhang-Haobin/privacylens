@@ -1,4 +1,5 @@
 import { recognizeLocal } from './ocr.js';
+import { createMaskAnimator } from './mask-motion.js';
 import { localSuggestions, suggestionsToFields, textPayload, validateClassifications, shouldHide } from './ocr-core.js';
 const $ = (id) => document.getElementById(id);
 const canvas = $('previewCanvas');
@@ -7,6 +8,9 @@ const maskLayer = document.createElement('div');
 maskLayer.className = 'mask-layer'; maskLayer.setAttribute('aria-hidden', 'true'); canvas.after(maskLayer);
 const previewMasks = new Map();
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+const maskAnimator = createMaskAnimator();
+let motionOverride = null;
+function motionEnabled() { return motionOverride ?? !reducedMotion.matches; }
 let previewLoadId = -1;
 const base = document.createElement('canvas');
 const b = base.getContext('2d');
@@ -97,30 +101,21 @@ function drawImage(target, includeMasks = true) {
 }
 function transitionMask(record, visible, animate) {
   if (record.visible === visible && animate) return;
-  const from = getComputedStyle(record.element).transform;
-  if (record.animation) { record.animation.onfinish = null; record.animation.cancel(); }
-  record.visible = visible;
-  const to = `scaleX(${visible ? 1 : 0})`;
-  record.element.style.transform = to;
-  const finish = () => {
-    record.animation = null;
+  maskAnimator.set(record, visible, animate, () => {
     if (!record.visible) { record.element.remove(); previewMasks.delete(record.key); }
-  };
-  if (!animate) { finish(); return; }
-  record.animation = record.element.animate([{ transform: from }, { transform: to }], {
-    duration: 380, easing: 'cubic-bezier(0.22, 1, 0.36, 1)'
   });
-  record.animation.onfinish = finish;
 }
 function renderMaskLayer() {
   // Animate only the preview. Export always paints the complete final masks.
   const newImage = previewLoadId !== state.loadId;
   if (newImage) {
-    previewMasks.forEach(record => { if (record.animation) { record.animation.onfinish = null; record.animation.cancel(); } });
+    previewMasks.forEach(record => maskAnimator.cancel(record));
     previewMasks.clear(); maskLayer.replaceChildren(); previewLoadId = state.loadId;
   }
   maskLayer.hidden = state.view !== 'protected';
-  const animate = !newImage && !maskLayer.hidden && !reducedMotion.matches;
+  const animate = !newImage && !maskLayer.hidden && motionEnabled();
+  $('motionButton').textContent = motionEnabled() ? 'Animation on' : 'Animation off';
+  $('motionButton').setAttribute('aria-pressed', String(motionEnabled()));
   const masks = [
     ...state.fields.filter(field => field.hidden).map(field => ({ key: `field-${field.id}`, rect: field.rect })),
     ...state.manual.map(mask => ({ key: `manual-${mask.id}`, rect: mask.rect }))
@@ -130,8 +125,8 @@ function renderMaskLayer() {
     let record = previewMasks.get(key);
     if (!record) {
       const element = document.createElement('div'); element.className = 'preview-mask';
-      element.style.transform = 'scaleX(0)'; maskLayer.append(element);
-      record = { key, element, visible: false, animation: null }; previewMasks.set(key, record);
+      element.style.clipPath = 'inset(0 100% 0 0)'; maskLayer.append(element);
+      record = { key, element, visible: false, progress: 0, motion: null }; previewMasks.set(key, record);
     }
     Object.assign(record.element.style, {
       left: `${x / base.width * 100}%`, top: `${y / base.height * 100}%`,
@@ -142,6 +137,7 @@ function renderMaskLayer() {
   previewMasks.forEach(record => { if (!active.has(record.key)) transitionMask(record, false, animate); });
 }
 reducedMotion.addEventListener('change', renderMaskLayer);
+$('motionButton').addEventListener('click', () => { motionOverride = !motionEnabled(); render(); });
 function renderCanvas() {
   drawImage(canvas, false);
   renderMaskLayer();

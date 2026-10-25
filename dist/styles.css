@@ -118,7 +118,7 @@ canvas { display: block; width: 100%; height: auto; max-height: 640px; object-fi
 canvas.mask-target { cursor: pointer; }
 .mask-layer { position: absolute; inset: 0; pointer-events: none; }
 .mask-layer[hidden] { display: none; }
-.preview-mask { position: absolute; background: #202b24; transform-origin: left center; }
+.preview-mask { position: absolute; background: #202b24; }
 .canvas-wrap.drawing { outline: 2px solid #498466; outline-offset: 3px; }
 .canvas-wrap.drawing canvas { cursor: crosshair; touch-action: none; }
 .draw-hint { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); background: var(--dark); color: white; padding: 10px 13px; font-size: 11px; border-radius: 7px; line-height: 1.5; white-space: nowrap; pointer-events: none; }
