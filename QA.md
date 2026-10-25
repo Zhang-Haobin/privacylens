@@ -1,5 +1,21 @@
 # Verification record
 
+## Optional AI integration — 25 October 2026
+
+- Fixed-model update: 10 tests passed, including rejection of other model IDs before provider access, ignoring legacy `OPENAI_MODEL` overrides, and returning 404 for the removed model-list action. The UI has no model selector, model-ID input or model-list button. Earlier entries below describe previous versions.
+
+- Economy-default update: `npm test` now passes 9 tests. The additional check verifies fallback to `gpt-6-luna`, `reasoning_effort: none`, a 2048-token completion cap and category/box-only results. The browser preselects this model before fetching a list. Real provider support for the cost-control parameters remains unverified.
+- `npm test`: 8 tests passed using mocked provider responses, covering model listing, bearer-key forwarding, Chat Completions image payloads, configured model fallback, missing key/consent/model, invalid image/dimensions, oversized requests, wrong methods, cross-origin submissions, invalid/out-of-range boxes, truncated/invalid completions, provider authentication/quota failures and timeouts. No live provider requests were made by these tests.
+- `node --check dist/app.js` and `git diff --check`: passed.
+- Local Node server HTTP check: model-list endpoint returned HTTP 503 with an actionable `OPENAI_API_KEY` configuration message and `Cache-Control: no-store` when no key was set.
+- Browser check: AI detection initially disabled without the transfer checkbox; loading models without a key showed the server configuration message.
+- Browser check: support context retained the sample order number and covered the five other fields. After an explicitly initiated detection failed for missing key, those existing masks remained and the detection button recovered.
+- Browser check: export dialog still opened with five solid masks and order number retained, with download disabled until the review checkbox is selected.
+
+Not yet verified: live novacode `/models` or image calls, availability of any particular model, provider-specific compatibility, model localization accuracy, a successful AI-result browser flow, image-switch race behavior in a browser, Vercel deployment, or responsive layout regression. A real server key and an image-capable provider model are needed for end-to-end service verification. Earlier layout/export checks below describe the previous version.
+
+## Original manual prototype
+
 Verified 19 October 2026 against the local browser preview.
 
 - JavaScript syntax: `node --check dist/app.js` passed.

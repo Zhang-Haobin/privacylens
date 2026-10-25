@@ -3,5 +3,8 @@
   "framework": null,
   "buildCommand": "",
   "installCommand": "",
-  "outputDirectory": "dist"
+  "outputDirectory": "dist",
+  "functions": {
+    "api/ai.js": { "maxDuration": 60 }
+  }
 }

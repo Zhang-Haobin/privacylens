@@ -32,7 +32,7 @@
   <main>
     <section class="intro">
       <div><div class="eyebrow"><span></span> A LITTLE CONTEXT. A LOT MORE PRIVACY.</div><h1>Share the story.<br>Keep the personal details.</h1><p>Useful screenshots shouldn’t come with unwanted disclosure.<br class="desktop-break"> Choose who it’s for. Review what stays. Share with intention.</p></div>
-      <div class="intro-note"><svg><use href="#i-lock"/></svg><div><strong>Your screenshot stays here.</strong><p>Images are edited in this browser.<br>No image uploads. No saved history.</p></div></div>
+      <div class="intro-note"><svg><use href="#i-lock"/></svg><div><strong>Local editing. Optional AI.</strong><p>Manual edits stay in your browser.<br>AI sends a copy only when you choose.</p></div></div>
     </section>
     <div class="workflow" aria-label="Workflow"><span class="step complete"><b>1</b> Choose a screenshot</span><span class="step-line"></span><span class="step active"><b>2</b> Set context & review</span><span class="step-line"></span><span class="step"><b>3</b> Export a copy</span><span class="prototype-pill">INTERACTIVE PROTOTYPE</span></div>
     <section class="workspace" aria-label="Screenshot editor">
@@ -41,6 +41,14 @@
         <h2>A starting point.</h2><p class="muted">Try our fictional order, or bring your own.</p>
         <button id="sampleButton" class="sample-card selected"><span class="sample-icon"><svg><use href="#i-box"/></svg></span><span><strong>Order screenshot</strong><small>Fictional sample · 6 labelled fields</small></span><svg class="sample-check"><use href="#i-check"/></svg></button>
         <button id="uploadButton" class="upload-button"><svg><use href="#i-upload"/></svg> Choose your own image<span>PNG, JPG or WebP · up to 20 MB</span></button><input type="file" id="fileInput" accept="image/png,image/jpeg,image/webp" hidden>
+        <div class="ai-panel" aria-labelledby="aiHeading">
+          <h3 id="aiHeading">Find details with AI</h3>
+          <p class="ai-help">Economy model: gpt-6-luna. Ready to use; no model setup needed.</p>
+          <label class="ai-consent"><input id="aiConsent" type="checkbox"><span>Send an unmasked copy of this image through this site's server to its configured AI provider. Default: ai.novacode.top.</span></label>
+          <button id="detectButton" class="primary-button" disabled>Detect sensitive details</button>
+          <p class="ai-help">Replaces AI suggestions; manual masks stay. AI can miss details or place masks incorrectly.</p>
+          <p id="aiStatus" class="ai-status" role="status" aria-live="polite">Your image stays local until you choose AI detection.</p>
+        </div>
         <div class="panel-divider"></div>
         <div class="section-kicker">02 / SHARING CONTEXT</div><h2>Who’s it for?</h2><p class="muted">The same image. Different reasons to share.</p>
         <div class="context-options" role="group" aria-label="Sharing context">
@@ -59,7 +67,7 @@
       <aside class="review-panel">
         <div class="section-kicker">03 / YOU’RE IN CONTROL</div><div class="review-title"><h2>Review the details.</h2><span class="count-badge" id="maskCount">6</span></div>
         <p class="muted" id="reviewIntro">Suggested masks for a public post. Toggle any field to change it.</p>
-        <div class="demo-notice"><svg><use href="#i-info"/></svg><span id="demoNotice">Sample fields are pre-labelled.<br>Live OCR is not connected.</span></div>
+        <div class="demo-notice"><svg><use href="#i-info"/></svg><span id="demoNotice">Sample fields are pre-labelled. AI detection is optional.</span></div>
         <div id="fieldList" class="field-list"></div>
         <div id="manualList" class="manual-list"></div>
         <div class="preserve-note" id="preserveNote"><span class="preserve-icon"><svg><use href="#i-check"/></svg></span><div><strong>The useful part stays.</strong><p>Delivery status, product and dates help explain the delay.</p></div></div>
@@ -70,7 +78,7 @@
     <footer><span>PrivacyLens <span class="footer-dot">/</span> A CCST9003 concept in progress</span><span>Built for thoughtful sharing.</span></footer>
   </main>
   <div class="toast" id="toast" role="status" hidden></div>
-  <dialog id="aboutDialog"><div class="dialog-top"><span class="eyebrow">BEHIND THE PROTOTYPE</span><button class="icon-button" data-close="aboutDialog" aria-label="Close about dialog"><svg><use href="#i-x"/></svg></button></div><h2>Privacy depends on context.</h2><p>PrivacyLens explores a simple question: can choosing the recipient and purpose help students share useful screenshots with less unnecessary disclosure?</p><div class="about-grid"><div><strong>Working in this version</strong><p>Two sharing scenarios, explained sample recommendations, editable masks, local image import and flattened PNG export.</p></div><div><strong>Still to be developed</strong><p>Real OCR, automatic detection on uploaded images, broader screenshot types and evaluation with students.</p></div></div><div class="chinese-note"><strong>课堂演示建议 / Demo guide</strong><p>先选公开发帖，观察订单号被遮住；再切换官方客服，订单号会保留，但姓名、电话和地址仍默认遮住。逐项查看原因，手动调整，再导出。这是分享情境规则的演示，不是真实 OCR 识别。</p></div><p class="dialog-small">All sample personal details are fictional. No image leaves your browser through this prototype. Recommendations are not a guarantee that every sensitive detail is covered.</p><button class="primary-button" data-close="aboutDialog">Back to the prototype <svg><use href="#i-arrow"/></svg></button></dialog>
+  <dialog id="aboutDialog"><div class="dialog-top"><span class="eyebrow">BEHIND THE PROTOTYPE</span><button class="icon-button" data-close="aboutDialog" aria-label="Close about dialog"><svg><use href="#i-x"/></svg></button></div><h2>Privacy depends on context.</h2><p>PrivacyLens explores a simple question: can choosing the recipient and purpose help students share useful screenshots with less unnecessary disclosure?</p><div class="about-grid"><div><strong>Working in this version</strong><p>Two sharing scenarios, pre-labelled sample recommendations, optional AI detection through a configured provider, editable masks and flattened PNG export.</p></div><div><strong>Still to be evaluated</strong><p>Model accuracy, bounding-box precision, broader screenshot types and evaluation with students. Model suggestions need your review.</p></div></div><div class="chinese-note"><strong>课堂演示建议 / Demo guide</strong><p>示例默认使用预设坐标。配置后端 Key 后，主动同意发送图片即可运行 AI 识别，固定使用 gpt-6-luna。公开分享默认遮挡所有识别字段；官方客服场景仅建议保留订单号。检查遮挡位置和漏检，再导出。</p></div><p class="dialog-small">All sample personal details are fictional. Manual editing is local. AI detection sends an unmasked, resized copy through this site's server to its configured provider (default: ai.novacode.top). This app does not save images or results; provider and hosting data policies apply. Suggestions do not guarantee that every sensitive detail is covered.</p><button class="primary-button" data-close="aboutDialog">Back to the prototype <svg><use href="#i-arrow"/></svg></button></dialog>
   <dialog id="exportDialog"><div class="dialog-top"><span class="eyebrow">ONE LAST LOOK</span><button class="icon-button" data-close="exportDialog" aria-label="Close export dialog"><svg><use href="#i-x"/></svg></button></div><h2>Ready for your audience?</h2><p id="exportContext"></p><div class="export-preview"><img id="exportPreview" alt="Preview of the exact redacted PNG to download"></div><div id="exportDetails" class="export-details"></div><label class="confirmation"><input type="checkbox" id="reviewConfirmation"><span>I’ve reviewed the whole image, including any details the suggestions may have missed.</span></label><button id="downloadButton" class="primary-button" disabled><svg><use href="#i-download"/></svg> Download protected PNG</button><p class="dialog-small">Only this flattened image is exported. No original image or hidden text is embedded.</p></dialog>
   <script src="app.js" type="module"></script>
 </body>
