@@ -1,5 +1,11 @@
 # Verification record
 
+## Restore by clicking the same region — 26 October 2026
+
+- Fixed the one-way canvas hit test: inactive suggested regions remain clickable, and manual regions retain their coordinates while disabled. Clicking the same region now toggles its mask in both directions with the existing wipe. Manual review rows offer Restore; only active masks count toward preview and export.
+- Browser checks: clicked the sample name at the same coordinates twice, observing 6 → 5 → 6 masks and Keep → Hide. Drew a manual mask in an uncovered area, stopped drawing, then clicked the same coordinates twice: 7 → 6 → 7, with the Restore row appearing while inactive. The restoration animation rendered a partially covered name during its wipe.
+- Added hit-test regression coverage for repeated toggling, manual restoration, overlap order, kept suggestions and blank/boundary points. All 36 tests passed, along with JavaScript syntax and diff checks. Changes remain local; no deployment performed.
+
 ## Visible wipe correction — 26 October 2026
 
 - Compared production JS/CSS against local SHA-256 hashes: Vercel was already serving commit `26152d2`. Deployment lag was ruled out. The user reported that masks changed without a visible wipe; the precise cause in their browser was not established.

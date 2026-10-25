@@ -1,5 +1,6 @@
 import { recognizeLocal } from './ocr.js';
 import { createMaskAnimator } from './mask-motion.js';
+import { maskTargetAtPoint } from './mask-targets.js';
 import { localSuggestions, suggestionsToFields, textPayload, validateClassifications, shouldHide } from './ocr-core.js';
 const $ = (id) => document.getElementById(id);
 const canvas = $('previewCanvas');
@@ -96,7 +97,7 @@ function drawImage(target, includeMasks = true) {
   const c = target.getContext('2d'); c.fillStyle = '#fff'; c.fillRect(0, 0, target.width, target.height); c.drawImage(base, 0, 0);
   if (includeMasks) {
     c.fillStyle = '#202b24';
-    [...state.fields.filter(f => f.hidden).map(f => f.rect), ...state.manual.map(m => m.rect)].forEach(r => c.fillRect(...r));
+    [...state.fields.filter(f => f.hidden).map(f => f.rect), ...state.manual.filter(m => m.hidden !== false).map(m => m.rect)].forEach(r => c.fillRect(...r));
   }
 }
 function transitionMask(record, visible, animate) {
@@ -118,7 +119,7 @@ function renderMaskLayer() {
   $('motionButton').setAttribute('aria-pressed', String(motionEnabled()));
   const masks = [
     ...state.fields.filter(field => field.hidden).map(field => ({ key: `field-${field.id}`, rect: field.rect })),
-    ...state.manual.map(mask => ({ key: `manual-${mask.id}`, rect: mask.rect }))
+    ...state.manual.filter(mask => mask.hidden !== false).map(mask => ({ key: `manual-${mask.id}`, rect: mask.rect }))
   ];
   const active = new Set(masks.map(mask => mask.key));
   masks.forEach(({ key, rect: [x, y, width, height] }, index) => {
@@ -153,7 +154,7 @@ function renderCanvas() {
     const r = dragRect(); ctx.fillStyle = '#202b24'; ctx.fillRect(...r); ctx.strokeStyle = '#c6db7a'; ctx.lineWidth = Math.max(2, base.width / 350); ctx.strokeRect(...r);
   }
 }
-function countMasks() { return state.fields.filter(f => f.hidden).length + state.manual.length; }
+function countMasks() { return state.fields.filter(f => f.hidden).length + state.manual.filter(mask => mask.hidden !== false).length; }
 function renderFields() {
   const list = $('fieldList'); list.replaceChildren();
   if (state.fields.length === 0) {
@@ -184,10 +185,13 @@ function renderFields() {
   const manualList = $('manualList'); manualList.replaceChildren();
   state.manual.forEach(mask => {
     const row = document.createElement('div'); row.className = 'manual-row';
-    const name = document.createElement('span'); name.textContent = `Manual mask ${mask.id}`;
-    const remove = document.createElement('button'); remove.setAttribute('aria-label', `Remove manual mask ${mask.id}`); remove.innerHTML = '<svg><use href="#i-x"/></svg>';
-    remove.addEventListener('click', () => { state.manual = state.manual.filter(m => m.id !== mask.id); render(); });
-    row.append(name, remove); manualList.append(row);
+    const hidden = mask.hidden !== false;
+    const name = document.createElement('span'); name.textContent = `Manual mask ${mask.id}${hidden ? '' : ' · visible'}`;
+    const toggle = document.createElement('button'); toggle.setAttribute('aria-label', `${hidden ? 'Remove' : 'Restore'} manual mask ${mask.id}`);
+    if (hidden) toggle.innerHTML = '<svg><use href="#i-x"/></svg>';
+    else toggle.textContent = 'Restore';
+    toggle.addEventListener('click', () => { mask.hidden = !hidden; render(); });
+    row.append(name, toggle); manualList.append(row);
   });
 }
 function render() {
@@ -205,8 +209,8 @@ function render() {
   $('fileLabel').textContent = state.filename;
   $('originalView').classList.toggle('active', state.view === 'original'); $('originalView').setAttribute('aria-pressed', String(state.view === 'original'));
   $('protectedView').classList.toggle('active', state.view === 'protected'); $('protectedView').setAttribute('aria-pressed', String(state.view === 'protected'));
-  $('canvasHint').textContent = state.drawing ? 'Drag to add a mask · Click “Add a mask” to stop' : state.view === 'original' ? 'Original preview · Switch to Protected to remove masks' : 'Click a mask to remove it · Solid masks on export';
-  $('previewNote').textContent = state.drawing ? 'Drag to cover a detail. Click “Add a mask” again or press Escape to remove masks.' : state.view === 'original' ? 'Original preview — selected masks are still applied to export.' : (state.ocrDocument ? 'Click a mask to reveal that detail. Check for missed text, codes and faces.' : isSample ? 'Click a mask to reveal that detail. Delivery status, item and timeline stay readable.' : 'Click a mask to reveal that detail. Check every part of the image.');
+  $('canvasHint').textContent = state.drawing ? 'Drag to add a mask · Click “Add a mask” to stop' : state.view === 'original' ? 'Original preview · Switch to Protected to change masks' : 'Click to remove · Click the same area to restore';
+  $('previewNote').textContent = state.drawing ? 'Drag to cover a detail. Click “Add a mask” again or press Escape to toggle masks.' : state.view === 'original' ? 'Original preview — selected masks are still applied to export.' : 'Click a mask to reveal the detail; click the same area again to cover it. Review the whole image.';
   $('preserveNote').querySelector('strong').textContent = isSample ? 'The useful part stays.' : 'Review the whole image.';
   $('preserveNote').querySelector('p').textContent = isSample ? 'Delivery status, product and dates help explain the delay.' : 'Sensitive details outside your masks will remain visible in the export.';
   $('undoButton').disabled = state.manual.length === 0;
@@ -224,28 +228,23 @@ let toastTimer;
 function announce(message) { const toast = $('toast'); toast.textContent = message; toast.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => { toast.hidden = true; }, 5800); }
 function setDrawing(enabled) { state.drawing = enabled; state.drag = null; $('canvasWrap').classList.toggle('drawing', enabled); $('drawButton').setAttribute('aria-pressed', String(enabled)); $('drawHint').hidden = !enabled; if (enabled) state.view = 'protected'; }
 function point(event) { const r = canvas.getBoundingClientRect(); return [Math.max(0, Math.min(base.width, (event.clientX - r.left) * base.width / r.width)), Math.max(0, Math.min(base.height, (event.clientY - r.top) * base.height / r.height))]; }
-function maskAtPoint([x, y]) {
+function maskAtPoint(position) {
   if (state.drawing || state.view !== 'protected') return null;
-  const contains = ({ rect: [left, top, width, height] }) => x >= left && x < left + width && y >= top && y < top + height;
-  // Match paint order: remove only the topmost mask when regions overlap.
-  const manual = state.manual.findLast(contains);
-  if (manual) return { manual, name: `Manual mask ${manual.id}` };
-  const field = state.fields.findLast(field => field.hidden && contains(field));
-  return field ? { field, name: field.name } : null;
+  return maskTargetAtPoint(position, state.fields, state.manual);
 }
 function showMaskTarget(target) {
   canvas.classList.toggle('mask-target', Boolean(target));
-  if (target) canvas.title = `Click to remove: ${target.name}`;
+  if (target) canvas.title = `Click to ${target.hidden ? 'remove' : 'restore'}: ${target.name}`;
   else canvas.removeAttribute('title');
 }
 function dragRect() { const { start, end } = state.drag; return [Math.floor(Math.min(start[0], end[0])), Math.floor(Math.min(start[1], end[1])), Math.ceil(Math.abs(end[0] - start[0])), Math.ceil(Math.abs(end[1] - start[1]))]; }
 canvas.addEventListener('click', event => {
   const target = maskAtPoint(point(event));
   if (!target) return;
-  if (target.manual) state.manual = state.manual.filter(mask => mask !== target.manual);
-  else { target.field.hidden = false; if (state.highlighted === target.field.id) state.highlighted = null; }
+  target.mask.hidden = !target.hidden;
+  if (!target.mask.hidden && state.highlighted === target.mask.id) state.highlighted = null;
   render();
-  announce(`Removed: ${target.name}. Review the preview before exporting.`);
+  announce(`${target.mask.hidden ? 'Restored' : 'Removed'}: ${target.name}. Review the preview before exporting.`);
 });
 canvas.addEventListener('pointerdown', event => {
   if (!state.drawing) return;
@@ -260,7 +259,7 @@ canvas.addEventListener('pointerleave', () => showMaskTarget(null));
 canvas.addEventListener('pointerup', event => {
   if (!state.drag) return;
   state.drag.end = point(event); const rect = dragRect();
-  if (rect[2] >= 5 && rect[3] >= 5) { state.manual.push({ id: state.nextId++, rect }); announce('Manual mask added. You can remove it in the review panel.'); }
+  if (rect[2] >= 5 && rect[3] >= 5) { state.manual.push({ id: state.nextId++, rect, hidden: true }); announce('Manual mask added. Stop drawing to click it off or back on.'); }
   state.drag = null; render();
 });
 canvas.addEventListener('pointercancel', () => { state.drag = null; renderCanvas(); });
