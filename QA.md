@@ -1,5 +1,11 @@
 # Verification record
 
+## Click recognized text lines to mask — 26 October 2026
+
+- Every OCR line is now a click target with locally derived, padded original-image bounds. Hovering outlines a line; clicking visible text creates a full-line mask, and clicking its mask reveals it. The expandable Recognized text list provides the same toggle with keyboard-accessible buttons. These custom masks use the existing preview animation/export pipeline and survive optional AI classification.
+- Actual local OCR on the fictional sample produced 84 words / 31 lines. Toggling “Delayed in transit” in the list changed the count 9 → 10 → 9. Clicking that text directly restored the same mask. Clicking the previously unsuggested product-name line added Text line 14 and synchronized the list's pressed state; clicking it again removed/restored the same mask without duplicates. Export showed the product-name mask and retained the separate price column. No AI request was needed. Local proof: `qa/ocr-click-line-export.png`.
+- Added regression checks for multi-word coverage, padding, image boundaries, separated columns, stable line identities, empty OCR and existing-mask priority. All 39 tests passed, with syntax and diff checks. This entry records local verification; no deployment performed.
+
 ## Restore by clicking the same region — 26 October 2026
 
 - Fixed the one-way canvas hit test: inactive suggested regions remain clickable, and manual regions retain their coordinates while disabled. Clicking the same region now toggles its mask in both directions with the existing wipe. Manual review rows offer Restore; only active masks count toward preview and export.

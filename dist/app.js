@@ -1,6 +1,6 @@
 import { recognizeLocal } from './ocr.js';
 import { createMaskAnimator } from './mask-motion.js';
-import { maskTargetAtPoint } from './mask-targets.js';
+import { maskTargetAtPoint, textLineTargets } from './mask-targets.js';
 import { localSuggestions, suggestionsToFields, textPayload, validateClassifications, shouldHide } from './ocr-core.js';
 const $ = (id) => document.getElementById(id);
 const canvas = $('previewCanvas');
@@ -8,6 +8,10 @@ const ctx = canvas.getContext('2d');
 const maskLayer = document.createElement('div');
 maskLayer.className = 'mask-layer'; maskLayer.setAttribute('aria-hidden', 'true'); canvas.after(maskLayer);
 const previewMasks = new Map();
+const lineHighlight = document.createElement('div');
+lineHighlight.className = 'text-line-highlight'; lineHighlight.hidden = true;
+lineHighlight.setAttribute('aria-hidden', 'true'); maskLayer.after(lineHighlight);
+let textLines = [];
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 const maskAnimator = createMaskAnimator();
 let motionOverride = null;
@@ -77,6 +81,7 @@ function cancelDetection() {
   detectionId++; detectionController?.abort(); detectionController = null; state.detecting = false; state.phase = '';
 }
 function clearDetection() {
+  textLines = [];
   cancelDetection(); state.aiDetected = false; state.detectedModel = ''; state.ocrDocument = null; state.highlighted = null; state.zoom = false; $('aiConsent').checked = false;
   setAIStatus('Start with local text recognition. Nothing is sent to AI until you choose classification.');
 }
@@ -158,7 +163,7 @@ function countMasks() { return state.fields.filter(f => f.hidden).length + state
 function renderFields() {
   const list = $('fieldList'); list.replaceChildren();
   if (state.fields.length === 0) {
-    const p = document.createElement('p'); p.className = 'empty-fields'; p.textContent = state.ocrDocument ? 'No suggestions are available. This does not mean the image is safe. Classify the text with AI or add masks for anything missed.' : 'Read text locally, or select “Add a mask” and cover details manually.'; list.append(p);
+    const p = document.createElement('p'); p.className = 'empty-fields'; p.textContent = state.ocrDocument ? 'No automatic suggestions are available. Click any recognized text line to mask it, or add a mask for anything OCR missed.' : 'Read text locally to click text lines, or select “Add a mask” and cover details manually.'; list.append(p);
   }
   state.fields.forEach(field => {
     const row = document.createElement('div'); row.className = 'field-row'; row.id = `field-${field.id}`;
@@ -186,13 +191,42 @@ function renderFields() {
   state.manual.forEach(mask => {
     const row = document.createElement('div'); row.className = 'manual-row';
     const hidden = mask.hidden !== false;
-    const name = document.createElement('span'); name.textContent = `Manual mask ${mask.id}${hidden ? '' : ' · visible'}`;
-    const toggle = document.createElement('button'); toggle.setAttribute('aria-label', `${hidden ? 'Remove' : 'Restore'} manual mask ${mask.id}`);
+    const maskName = mask.name || `Manual mask ${mask.id}`;
+    const name = document.createElement('span'); name.textContent = `${maskName}${hidden ? '' : ' · visible'}`;
+    const toggle = document.createElement('button'); toggle.setAttribute('aria-label', `${hidden ? 'Remove' : 'Restore'} ${maskName.toLowerCase()}`);
     if (hidden) toggle.innerHTML = '<svg><use href="#i-x"/></svg>';
     else toggle.textContent = 'Restore';
     toggle.addEventListener('click', () => { mask.hidden = !hidden; render(); });
     row.append(name, toggle); manualList.append(row);
   });
+  const lineList = $('ocrLineList'); const lineScroll = lineList.scrollTop; lineList.replaceChildren();
+  $('ocrLinesPanel').hidden = !textLines.length;
+  $('ocrLinesSummary').textContent = `Recognized text · ${textLines.length} lines`;
+  textLines.forEach(line => {
+    const mask = lineMask(line);
+    const hidden = Boolean(mask && mask.hidden !== false);
+    const button = document.createElement('button'); button.type = 'button'; button.className = 'ocr-line-button';
+    button.setAttribute('aria-pressed', String(hidden)); button.title = line.text;
+    const label = document.createElement('span'); label.textContent = line.text;
+    const action = document.createElement('small'); action.textContent = hidden ? 'Reveal' : 'Mask';
+    button.append(label, action);
+    button.addEventListener('click', () => {
+      toggleTextLine(line); setDrawing(false); state.view = 'protected'; render();
+      const index = textLines.indexOf(line); $('ocrLineList').children[index]?.focus({ preventScroll: true });
+    });
+    lineList.append(button);
+  });
+  lineList.scrollTop = lineScroll;
+}
+function lineMask(line) { return state.manual.find(mask => mask.source === 'ocr-line' && mask.lineKey === line.key); }
+function toggleTextLine(line) {
+  let mask = lineMask(line);
+  if (!mask) {
+    mask = { id: state.nextId++, name: line.name, source: 'ocr-line', lineKey: line.key, rect: [...line.rect], hidden: false };
+    state.manual.push(mask);
+  }
+  mask.hidden = !mask.hidden;
+  return mask;
 }
 function render() {
   showMaskTarget(null);
@@ -209,8 +243,8 @@ function render() {
   $('fileLabel').textContent = state.filename;
   $('originalView').classList.toggle('active', state.view === 'original'); $('originalView').setAttribute('aria-pressed', String(state.view === 'original'));
   $('protectedView').classList.toggle('active', state.view === 'protected'); $('protectedView').setAttribute('aria-pressed', String(state.view === 'protected'));
-  $('canvasHint').textContent = state.drawing ? 'Drag to add a mask · Click “Add a mask” to stop' : state.view === 'original' ? 'Original preview · Switch to Protected to change masks' : 'Click to remove · Click the same area to restore';
-  $('previewNote').textContent = state.drawing ? 'Drag to cover a detail. Click “Add a mask” again or press Escape to toggle masks.' : state.view === 'original' ? 'Original preview — selected masks are still applied to export.' : 'Click a mask to reveal the detail; click the same area again to cover it. Review the whole image.';
+  $('canvasHint').textContent = state.drawing ? 'Drag to add a mask · Click “Add a mask” to stop' : state.view === 'original' ? 'Original preview · Switch to Protected to change masks' : textLines.length ? 'Click any text line to mask it · Click a mask to reveal' : 'Click to remove · Click the same area to restore';
+  $('previewNote').textContent = state.drawing ? 'Drag to cover a detail. Click “Add a mask” again or press Escape to toggle masks.' : state.view === 'original' ? 'Original preview — selected masks are still applied to export.' : textLines.length ? 'Hover over recognized text to see its line. Click to cover it; click again to reveal it.' : 'Click a mask to reveal the detail; click the same area again to cover it. Review the whole image.';
   $('preserveNote').querySelector('strong').textContent = isSample ? 'The useful part stays.' : 'Review the whole image.';
   $('preserveNote').querySelector('p').textContent = isSample ? 'Delivery status, product and dates help explain the delay.' : 'Sensitive details outside your masks will remain visible in the export.';
   $('undoButton').disabled = state.manual.length === 0;
@@ -230,21 +264,28 @@ function setDrawing(enabled) { state.drawing = enabled; state.drag = null; $('ca
 function point(event) { const r = canvas.getBoundingClientRect(); return [Math.max(0, Math.min(base.width, (event.clientX - r.left) * base.width / r.width)), Math.max(0, Math.min(base.height, (event.clientY - r.top) * base.height / r.height))]; }
 function maskAtPoint(position) {
   if (state.drawing || state.view !== 'protected') return null;
-  return maskTargetAtPoint(position, state.fields, state.manual);
+  return maskTargetAtPoint(position, state.fields, state.manual, textLines);
 }
 function showMaskTarget(target) {
   canvas.classList.toggle('mask-target', Boolean(target));
-  if (target) canvas.title = `Click to ${target.hidden ? 'remove' : 'restore'}: ${target.name}`;
+  if (target) canvas.title = `Click to ${target.hidden ? 'reveal' : 'mask'}: ${target.name}`;
   else canvas.removeAttribute('title');
+  const rect = target?.line?.rect || (target?.mask?.source === 'ocr-line' ? target.mask.rect : null);
+  lineHighlight.hidden = !rect;
+  if (rect) {
+    const [x, y, width, height] = rect;
+    Object.assign(lineHighlight.style, { left: `${x / base.width * 100}%`, top: `${y / base.height * 100}%`, width: `${width / base.width * 100}%`, height: `${height / base.height * 100}%` });
+  }
 }
 function dragRect() { const { start, end } = state.drag; return [Math.floor(Math.min(start[0], end[0])), Math.floor(Math.min(start[1], end[1])), Math.ceil(Math.abs(end[0] - start[0])), Math.ceil(Math.abs(end[1] - start[1]))]; }
 canvas.addEventListener('click', event => {
   const target = maskAtPoint(point(event));
   if (!target) return;
-  target.mask.hidden = !target.hidden;
-  if (!target.mask.hidden && state.highlighted === target.mask.id) state.highlighted = null;
+  const mask = target.line ? toggleTextLine(target.line) : target.mask;
+  if (!target.line) mask.hidden = !target.hidden;
+  if (!mask.hidden && state.highlighted === mask.id) state.highlighted = null;
   render();
-  announce(`${target.mask.hidden ? 'Restored' : 'Removed'}: ${target.name}. Review the preview before exporting.`);
+  announce(`${mask.hidden ? 'Masked' : 'Revealed'}: ${target.name}. Review the preview before exporting.`);
 });
 canvas.addEventListener('pointerdown', event => {
   if (!state.drawing) return;
@@ -307,6 +348,7 @@ function mergeLocalFields(previous, added) {
 $('zoomButton').addEventListener('click', () => { state.zoom = !state.zoom; renderCanvas(); });
 $('cancelDetectionButton').addEventListener('click', () => { cancelDetection(); render(); setAIStatus('Detection cancelled. Earlier masks retained. A sent AI request may still finish at the provider.'); });
 $('ocrLanguage').addEventListener('change', () => {
+  textLines = [];
   state.ocrDocument = null; state.aiDetected = false; state.detectedModel = ''; $('aiConsent').checked = false;
   render(); setAIStatus('Language changed. Earlier masks retained. Read the text again before AI classification.');
 });
@@ -323,8 +365,9 @@ $('ocrButton').addEventListener('click', async () => {
     } });
     if (currentId !== detectionId || loadId !== state.loadId || controller.signal.aborted) return;
     const suggestions = suggestionsToFields(localSuggestions(document), document);
+    textLines = textLineTargets(document);
     state.fields = mergeLocalFields(state.fields, suggestions); state.ocrDocument = document; state.aiDetected = false; state.detectedModel = ''; state.view = 'protected'; state.highlighted = null;
-    setAIStatus(`${document.words.length} text words read locally. ${suggestions.length} local mask suggestions added; earlier masks retained. ${document.words.length ? 'Review names and addresses manually or opt in to AI text classification.' : 'No text found: add masks manually. This does not mean the image is safe.'}`);
+    setAIStatus(`${document.words.length} text words read locally. ${suggestions.length} local mask suggestions added; earlier masks retained. ${document.words.length ? 'Click any recognized text line in the image or the text list to mask it. AI classification is optional.' : 'No text found: add masks manually. This does not mean the image is safe.'}`);
   } catch (error) {
     if (currentId === detectionId && loadId === state.loadId) setAIStatus(error.name === 'AbortError' ? 'Local OCR timed out. Earlier masks retained; try a smaller image.' : error.message, true);
   } finally {

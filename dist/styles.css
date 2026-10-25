@@ -119,6 +119,18 @@ canvas.mask-target { cursor: pointer; }
 .mask-layer { position: absolute; inset: 0; pointer-events: none; }
 .mask-layer[hidden] { display: none; }
 .preview-mask { position: absolute; background: #202b24; }
+.text-line-highlight { position: absolute; pointer-events: none; outline: 2px solid #50856b; outline-offset: 2px; background: #6caa851a; z-index: 1; }
+.text-line-highlight[hidden] { display: none; }
+.ocr-lines-panel { margin-top: 18px; border: 1px solid var(--line); border-radius: 9px; padding: 12px; }
+.ocr-lines-panel[hidden] { display: none; }
+.ocr-lines-panel summary { cursor: pointer; color: var(--green); font-size: 12px; font-weight: 600; }
+.ocr-lines-panel > p { font-size: 11px; line-height: 1.7; color: var(--muted); margin-top: 9px; }
+.ocr-line-list { max-height: 300px; overflow: auto; margin-top: 10px; }
+.ocr-line-button { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; padding: 10px 7px; background: transparent; border: 0; border-bottom: 1px solid var(--line); color: var(--ink); font-size: 12px; text-align: left; }
+.ocr-line-button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ocr-line-button small { color: var(--green); flex-shrink: 0; font-size: 10px; }
+.ocr-line-button[aria-pressed=true] { background: var(--mint); }
+.ocr-line-button:hover { background: #e5efdf; }
 .canvas-wrap.drawing { outline: 2px solid #498466; outline-offset: 3px; }
 .canvas-wrap.drawing canvas { cursor: crosshair; touch-action: none; }
 .draw-hint { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); background: var(--dark); color: white; padding: 10px 13px; font-size: 11px; border-radius: 7px; line-height: 1.5; white-space: nowrap; pointer-events: none; }
@@ -216,6 +228,7 @@ dialog > p { font-size: 13px; color: #70845f; line-height: 1.9; }
   .review-panel > .section-kicker, .review-title, .review-panel > .muted, .demo-notice { grid-column: 1 / -1; }
   .field-list { grid-column: 1; grid-row: 5 / 9; }
   .manual-list { grid-column: 1; }
+  .ocr-lines-panel { grid-column: 1 / -1; }
   .preserve-note { grid-column: 2; grid-row: 5; align-self: start; }
   .export-area { grid-column: 2; grid-row: 6 / 9; align-self: end; }
   .field-name { font-size: 12px; }
