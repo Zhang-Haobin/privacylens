@@ -1,5 +1,13 @@
 # Verification record
 
+## Production deployment — 25 October 2026
+
+- Pushed implementation commit `f9bc4be` to `Zhang-Haobin/privacylens` on `main`; Vercel's Git integration deployed it to `https://privacylens-seven.vercel.app/`.
+- Configured `OPENAI_API_KEY` as a Vercel Production Secret and `OPENAI_BASE_URL` as a Production Config, then redeployed to apply them. The local `.env` is ignored; the configured key was checked absent from the staged implementation before pushing.
+- Production HTTP checks: requests without transfer consent returned 400; requests selecting another model returned 400 with the fixed-model restriction. Both checks stopped before calling the model.
+- Production browser check: no model selector, model-ID input or model-list button. Manual sample recommendations rendered normally.
+- One live detection on the built-in fictional order completed successfully through novacode using the fixed `gpt-6-luna` request, including the output cap and disabled reasoning. The UI received six suggestions: order number, personal name, phone, address, email and payment details. This verifies the deployed integration and response rendering for that sample; it does not establish localization accuracy on arbitrary images.
+
 ## Optional AI integration — 25 October 2026
 
 - Fixed-model update: 10 tests passed, including rejection of other model IDs before provider access, ignoring legacy `OPENAI_MODEL` overrides, and returning 404 for the removed model-list action. The UI has no model selector, model-ID input or model-list button. Earlier entries below describe previous versions.
