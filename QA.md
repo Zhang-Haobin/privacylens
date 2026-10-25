@@ -1,5 +1,13 @@
 # Verification record
 
+## Visual refresh — 25 October 2026
+
+- Removed the rotated privacy notice; it now aligns horizontally on desktop and appears as a full-width card on mobile.
+- Refined typography, contrast, spacing, card borders, buttons and switches. Desktop preview aligns the screenshot at the top; responsive layouts use three columns, two columns and a single column at narrower widths.
+- Local browser visual checks: desktop at approximately 1500 CSS pixels and the in-app mobile viewport at approximately 355 CSS pixels. Both displayed the upright privacy card and readable controls without visible overlap.
+- Mobile interaction check: changing to support retained the order number and masked the other five sample fields. Export from Original view still opened the protected image with five masks; the download button remained disabled until review confirmation.
+- `git diff --check` passed. No JavaScript, AI request parameters or backend model restrictions were changed in this refresh.
+
 ## Production deployment — 25 October 2026
 
 - Pushed implementation commit `f9bc4be` to `Zhang-Haobin/privacylens` on `main`; Vercel's Git integration deployed it to `https://privacylens-seven.vercel.app/`.
