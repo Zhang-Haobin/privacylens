@@ -38,10 +38,10 @@ test('maps only selected words and splits multi-line addresses without covering 
 });
 
 test('payment transaction and reference identifiers remain hidden in support context', () => {
-  for (const category of ['transaction', 'reference', 'payment', 'phone', 'address']) assert.equal(shouldHide({ category }, 'support'), true);
+  for (const category of ['transaction', 'reference', 'payment', 'phone', 'address']) assert.equal(shouldHide({ category }, 'support', 'lookup'), true);
   for (const category of ['order', 'tracking']) {
-    assert.equal(shouldHide({ category }, 'support'), false);
-    assert.equal(shouldHide({ category }, 'public'), true);
+    assert.equal(shouldHide({ category }, 'support', 'lookup'), false);
+    assert.equal(shouldHide({ category }, 'public', 'lookup'), true);
   }
 });
 
@@ -55,11 +55,13 @@ test('local Chinese labels tolerate spaces inserted between OCR characters', () 
   assert.deepEqual(localSuggestions(doc).map(f => f.category), ['order', 'phone']);
 });
 
-test('client rejects unknown, duplicate and freely positioned AI classifications atomically', () => {
-  for (const bad of [[{ ...valid, wordIds: ['w999'] }], [valid, valid], [{ ...valid, box: [0, 0, 1, 1] }], [{ ...valid, category: 'face' }]]) {
+test('client rejects unknown and freely positioned classifications while preserving overlapping fields', () => {
+  for (const bad of [[{ ...valid, wordIds: ['w999'] }], [{ ...valid, box: [0, 0, 1, 1] }], [{ ...valid, category: 'face' }]]) {
     assert.throws(() => validateClassifications(bad, document));
   }
   assert.equal(validateClassifications([valid], document).length, 1);
+  const overlap = validateClassifications([valid, { ...valid, category: 'account', wordIds: ['w2', 'w2', 'w3'] }], document);
+  assert.equal(overlap.length, 2); assert.deepEqual(overlap[1].wordIds, ['w2', 'w3']);
 });
 
 test('local and AI phone suggestions combine into one switch without losing the outer coverage', () => {
@@ -102,8 +104,29 @@ test('text API rejects missing consent, duplicate IDs, images, wrong model and i
   }
 });
 
-test('text API rejects partial, conflicting, extra-coordinate and hallucinated results without retries', async () => {
-  for (const fields of [[valid, valid], [{ ...valid, wordIds: ['w999'] }], [{ ...valid, box: [0, 0, 1, 1] }], [{ ...valid, wordIds: [] }], [{ ...valid, category: 'code' }]]) {
+test('text API preserves legitimate overlapping classifications without losing coverage', async () => {
+  const overlap = { ...valid, category: 'account', wordIds: ['w2', 'w2', 'w3'] };
+  const response = await handleAI(request(), { env, fetchImpl: async () => completion([valid, overlap]) });
+  assert.equal(response.status, 200);
+  assert.deepEqual((await response.json()).fields, [valid, { ...overlap, wordIds: ['w2', 'w3'] }]);
+});
+
+test('unknown AI word IDs trigger one complete retry and never return partial fields', async () => {
+  let calls = 0;
+  const response = await handleAI(request(), { env, fetchImpl: async (_url, options) => {
+    calls++;
+    if (calls === 2) assert.match(JSON.parse(options.body).messages[0].content, /previous answer contained an unknown word ID/i);
+    return completion(calls === 1 ? [{ ...valid, wordIds: ['w2', 'w999'] }] : [valid]);
+  } });
+  assert.equal(response.status, 200); assert.equal(calls, 2); assert.deepEqual((await response.json()).fields, [valid]);
+  let failures = 0;
+  const invalid = await handleAI(request(), { env, fetchImpl: async () => { failures++; return completion([{ ...valid, wordIds: ['w2', 'w999'] }]); } });
+  assert.equal(invalid.status, 502); assert.equal(failures, 2);
+  const body = await invalid.json(); assert.ok(!body.fields && !JSON.stringify(body).includes('w999'));
+});
+
+test('malformed or extra-coordinate AI results fail atomically without retry', async () => {
+  for (const fields of [[{ ...valid, box: [0, 0, 1, 1] }], [{ ...valid, wordIds: [] }], [{ ...valid, category: 'code' }]]) {
     let calls = 0;
     const response = await handleAI(request(), { env, fetchImpl: async () => { calls++; return completion(fields); } });
     assert.equal(response.status, 502); assert.equal(calls, 1);

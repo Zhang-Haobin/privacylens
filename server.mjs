@@ -11,6 +11,13 @@ const files = new Map([
   ['/mask-targets.js', ['mask-targets.js', 'text/javascript; charset=utf-8']],
   ['/ocr.js', ['ocr.js', 'text/javascript; charset=utf-8']],
   ['/ocr-core.js', ['ocr-core.js', 'text/javascript; charset=utf-8']],
+  ['/sharing-context.js', ['sharing-context.js', 'text/javascript; charset=utf-8']],
+  ['/editor-geometry.js', ['editor-geometry.js', 'text/javascript; charset=utf-8']],
+  ['/privacy-types.js', ['privacy-types.js', 'text/javascript; charset=utf-8']],
+  ['/document-context.js', ['document-context.js', 'text/javascript; charset=utf-8']],
+  ['/field-state.js', ['field-state.js', 'text/javascript; charset=utf-8']],
+  ['/samples.js', ['samples.js', 'text/javascript; charset=utf-8']],
+  ['/workflow.js', ['workflow.js', 'text/javascript; charset=utf-8']],
   ['/styles.css', ['styles.css', 'text/css; charset=utf-8']]
 ]);
 // Explicitly inventory public OCR assets; never expose arbitrary filesystem paths.

@@ -9,8 +9,12 @@ function abortable(promise, signal) {
     promise.then(resolve, reject).finally(() => signal.removeEventListener('abort', cancel));
   });
 }
-export async function recognizeLocal(image, { language = 'eng', signal, onProgress = () => {} }) {
-  if (!['eng', 'eng+chi_tra', 'eng+chi_sim'].includes(language)) throw new Error('Choose a supported OCR language.');
+export function recognitionLanguage(language) {
+  if (!['auto', 'eng', 'eng+chi_tra', 'eng+chi_sim'].includes(language)) throw new Error('Choose a supported recognition language.');
+  return language === 'auto' ? 'eng+chi_tra+chi_sim' : language;
+}
+export async function recognizeLocal(image, { language = 'auto', signal, onProgress = () => {} }) {
+  language = recognitionLanguage(language);
   if (signal.aborted) throw aborted();
   let entry = cached;
   if (entry && entry.language !== language) { cached = null; entry.promise.then(worker => worker.terminate()).catch(() => {}); entry = null; }

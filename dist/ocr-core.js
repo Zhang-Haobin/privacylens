@@ -1,6 +1,7 @@
 // Pure coordinate / policy helpers, shared by the browser and regression tests.
-export const textCategories = ['order', 'tracking', 'transaction', 'reference', 'name', 'phone', 'address', 'email', 'payment', 'id', 'account', 'other'];
-export const categoryNames = { order: 'Order number', tracking: 'Tracking number', transaction: 'Payment transaction ID', reference: 'Reference number', name: 'Personal name', phone: 'Phone number', address: 'Address', email: 'Email address', payment: 'Payment details', id: 'Identity document', account: 'Account identifier', other: 'Sensitive detail' };
+export { shouldHide } from './sharing-context.js';
+import { textCategories, categoryNames } from './privacy-types.js';
+export { textCategories, categoryNames };
 const roleNames = { sender: 'Sender', recipient: 'Recipient', unknown: '', merchant: 'Merchant' };
 const area = b => Math.max(0, b.x1 - b.x0) * Math.max(0, b.y1 - b.y0);
 function overlaps(a, b) {
@@ -60,6 +61,32 @@ export function localSuggestions(document) {
   const fields = [];
   for (const line of document.lines) {
     const text = line.text.replace(/(?<=\p{Script=Han})\s+(?=\p{Script=Han})/gu, '');
+    // Match labelled value spans before broad legacy line rules. One token may
+    // contain several values; the first (private) category wins conservatively.
+    const original = line.words.map(word => word.text).join(' ');
+    const occupied = new Set();
+    const spans = [];
+    let offset = 0;
+    for (const word of line.words) { spans.push({ word, start: offset, end: offset + word.text.length }); offset += word.text.length + 1; }
+    const rules = [
+      ['secret', /(?:password|access\s*code|door\s*code|api\s*key|auth\s*token|verification\s*code|密\s*碼|密\s*码|驗\s*證\s*碼|验\s*证\s*码)\s*[:：]\s*(\S+)/igu],
+      ['student_id', /(?:student\s*(?:id|number|no\.?)|學\s*號|学\s*号)\s*[:：#]?\s*([A-Z0-9][A-Z0-9-]{4,})/igu],
+      ['birth_date', /(?:date\s*of\s*birth|dob|出\s*生\s*日\s*期)\s*[:：]\s*([0-9][0-9/ .-]{5,20})/igu],
+      ['name', /(?:student\s*name|name|姓\s*名)\s*[:：]\s*([\p{L}][\p{L} .'-]*?)(?=\s+(?:student\s*id|gpa|phone|email)\s*[:：]|$)/igu],
+      ['private_message', /(?:private\s*note|private\s*message|私\s*人\s*訊\s*息|私\s*人\s*消\s*息)\s*[:：]\s*(.+)/igu],
+      ['gpa', /(?:\bc?gpa\b|grade\s*point\s*average|平\s*均\s*績\s*點|平\s*均\s*绩\s*点)\s*[:：]?\s*([0-9]+(?:\.[0-9]+)?(?:\s*\/\s*[0-9]+(?:\.[0-9]+)?)?)/igu],
+      ['grade', /(?:grade|成\s*績|成\s*绩)\s*[:：]\s*([A-F][+-]?|[0-9]{1,3}(?:\.[0-9]+)?)/igu],
+      ['course', /\b([A-Z]{2,8}\s?[0-9]{3,5})\b/gu],
+      ['university', /((?:[\p{L}][\p{L} &'’.-]{0,100}\s)?(?:university|college)(?:\s+of\s+[\p{L}][\p{L} &'’.-]{0,80})?|[\p{Script=Han}]{2,20}大學|[\p{Script=Han}]{2,20}大学)/igu]
+    ];
+    for (const [category, rule] of rules) for (const match of original.matchAll(rule)) {
+      if (category === 'university' && (/not\s+an?\s+official|fictional|demonstration/i.test(original) || /^(?:university|college)$/i.test(match[1].trim()))) continue;
+      const start = match.index + match[0].lastIndexOf(match[1]), end = start + match[1].length;
+      const words = spans.filter(span => span.start < end && span.end > start).map(span => span.word);
+      if (!words.length || words.some(word => occupied.has(word.id))) continue;
+      words.forEach(word => occupied.add(word.id));
+      fields.push({ category, role: 'unknown', wordIds: words.map(word => word.id), source: 'local' });
+    }
     let category;
     if (/transaction\s*(?:id|number|#)|交易(?:編號|编号|號碼|号码)/i.test(text)) category = 'transaction';
     else if (/\b(?:tracking|waybill|trk\s*#)|運單|运单|快遞單|快递单/i.test(text)) category = 'tracking';
@@ -68,7 +95,31 @@ export function localSuggestions(document) {
     else if (/[\w.+-]+\s*@\s*[\w.-]+\.[a-z]{2,}/i.test(text) || /\bemail\s*[:：]|電郵|电邮|郵箱|邮箱/i.test(text)) category = 'email';
     else if (/\b(?:tel|phone|mobile)\s*[.:：]|電話|电话|手機|手机/i.test(text) || /(?:\+\d[\d ()-]{6,}\d)/.test(text)) category = 'phone';
     else if (/(?:[*•·xX]{2,}|visa|mastercard|amex).{0,12}\d{4}\b/i.test(text)) category = 'payment';
-    if (category) fields.push({ category, role: 'unknown', wordIds: line.words.map(w => w.id), source: 'local' });
+    if (category) {
+      const email = category === 'email' ? original.match(/[\w.+-]+\s*@\s*[\w.-]+\.[a-z]{2,}/i) : null;
+      const candidates = email ? spans.filter(span => span.start < email.index + email[0].length && span.end > email.index).map(span => span.word) : line.words;
+      const wordIds = candidates.filter(word => !occupied.has(word.id)).map(word => word.id);
+      if (wordIds.length) fields.push({ category, role: 'unknown', wordIds, source: 'local' });
+    }
+  }
+  // OCR may split a label and its value into separate columns on one baseline.
+  // Link only a nearby value to its right, with a category-specific value shape.
+  for (const label of document.lines) {
+    const text = label.text.replace(/(?<=\p{Script=Han})\s+(?=\p{Script=Han})/gu, '').trim();
+    const category = /^(?:student\s*name|name|姓名)\s*[:：]$/i.test(text) ? 'name'
+      : /^(?:student\s*(?:id|number)|學號|学号)\s*[:：#]?$/i.test(text) ? 'student_id'
+      : /^(?:date\s*of\s*birth|dob|出生日期)\s*[:：]$/i.test(text) ? 'birth_date'
+      : /^(?:order\s*(?:details|number|no\.?)|訂單(?:號|編號)?|订单(?:号|编号)?)\s*[:：#]?$/i.test(text) ? 'order'
+      : /^(?:tracking(?:\s*number)?|waybill|運單號|运单号)\s*[:：#]?$/i.test(text) ? 'tracking' : null;
+    if (!category || !label.words.length) continue;
+    const right = Math.max(...label.words.map(word => word.bbox.x1));
+    const top = Math.min(...label.words.map(word => word.bbox.y0)), bottom = Math.max(...label.words.map(word => word.bbox.y1));
+    const candidates = document.lines.filter(line => line !== label && line.words.length).map(line => ({ line, left: Math.min(...line.words.map(word => word.bbox.x0)), top: Math.min(...line.words.map(word => word.bbox.y0)), bottom: Math.max(...line.words.map(word => word.bbox.y1)) }))
+      .filter(value => value.left >= right && value.left - right <= document.width * (['order', 'tracking'].includes(category) ? 0.5 : 0.3) && Math.max(0, Math.min(bottom, value.bottom) - Math.max(top, value.top)) / Math.max(1, Math.min(bottom - top, value.bottom - value.top)) >= 0.65).sort((a, b) => a.left - b.left);
+    const value = candidates[0]?.line;
+    if (!value || fields.some(field => field.wordIds.some(id => value.words.some(word => word.id === id)))) continue;
+    const valid = category === 'student_id' ? /^[A-Z0-9][A-Z0-9 -]{4,}$/i.test(value.text) : ['order', 'tracking'].includes(category) ? /^#?[A-Z0-9][A-Z0-9-]{5,}$/i.test(value.text) : category === 'birth_date' ? /^\d[\d/ .-]{5,20}$/.test(value.text) : /^[\p{L}][\p{L} .'-]{1,100}$/u.test(value.text) && !/\b(?:grade|course|gpa|semester|university)\b/i.test(value.text);
+    if (valid) fields.push({ category, role: 'unknown', wordIds: value.words.map(word => word.id), source: 'local' });
   }
   // Link every occurrence of a locally identified number, not just its labelled line.
   const numbered = fields.filter(f => ['order', 'tracking', 'transaction', 'reference'].includes(f.category));
@@ -83,14 +134,13 @@ export function localSuggestions(document) {
 }
 export function validateClassifications(fields, document) {
   if (!Array.isArray(fields) || fields.length > 150) throw new Error('Invalid text classifications. Existing masks retained.');
-  const known = new Set(document.words.map(word => word.id)); const used = new Set();
+  const known = new Set(document.words.map(word => word.id));
   return fields.map(field => {
     if (!textCategories.includes(field?.category) || !Object.hasOwn(roleNames, field.role) || !Array.isArray(field.wordIds) || !field.wordIds.length || field.wordIds.length > 200 || field.box !== undefined) throw new Error('Invalid text classification. Existing masks retained.');
     for (const id of field.wordIds) {
-      if (!known.has(id) || used.has(id)) throw new Error('Unknown or conflicting text ID. Existing masks retained.');
-      used.add(id);
+      if (!known.has(id)) throw new Error('AI could not match some text to this image. Existing masks are unchanged.');
     }
-    return { category: field.category, role: field.role, wordIds: [...field.wordIds], source: 'ai' };
+    return { category: field.category, role: field.role, wordIds: [...new Set(field.wordIds)], source: 'ai' };
   });
 }
 export function suggestionsToFields(suggestions, document) {
@@ -143,9 +193,6 @@ export function suggestionsToFields(suggestions, document) {
   return unique.map((field, index) => {
     const label = `${roleNames[field.role] ? `${roleNames[field.role]} · ` : ''}${categoryNames[field.category]}`;
     counts[label] = (counts[label] || 0) + 1;
-    return { ...field, id: `ocr-${index + 1}`, name: `${label} ${counts[label]}`, publicReason: field.source === 'local' ? 'Found locally in the text. Review this whole region for missed characters.' : 'AI classified this text; its position comes from local OCR. Review the coverage.', supportReason: ['order', 'tracking'].includes(field.category) ? 'Can help verified support locate the delivery. Confirm this is the number they need.' : 'Keep private for an initial delivery enquiry. Review this whole region.' };
+    return { ...field, id: `ocr-${index + 1}`, name: `${label} ${counts[label]}`, anchor: document.words.filter(word => field.wordIds.includes(word.id)).map(word => word.text).join(' ') };
   });
-}
-export function shouldHide(field, context) {
-  return context === 'public' || !['order', 'tracking'].includes(field.category || field.id);
 }

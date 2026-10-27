@@ -1,3 +1,60 @@
+## Guided flow and two-pane workspace — 27 October 2026
+
+- Replaced the default three-column view with a landing upload/drop page, an after-reading sharing dialog, and a two-pane image/review workspace. Initial image entry invokes local reading automatically. Existing detection, policy, override and export engines are retained.
+- Recipient/task presets are declared in `dist/workflow.js`. Employer and Official support ask a purpose; unselected or Custom contexts do not invent an audience. Type correction and full audience/purpose controls remain available under secondary disclosures. Recipient notes, language, rescan, reset and motion moved to More options. Optional AI has its own consent dialog and is never called by the automatic local path.
+- Default real-image recognition resolves to English + Traditional + Simplified Chinese; this is a model combination, not a claimed language-detection accuracy score. Fictional English examples use English under the default setting. Existing English/Traditional Chinese mode also completed a real scan in the browser.
+- Browser: initial landing exposed upload and examples without document/audience/language controls. Selecting the transcript example automatically showed local reading and disabled export. Completion opened Suggested: Academic transcript with sharing choices. Employer required a purpose before Continue was enabled. Review entered the two-pane workspace with all per-field reasons initially collapsed.
+- Browser: cancelled initial reading still opened context and allowed manual review. More options re-read completed with 48 words, 12 local fields and zero unmatched earlier regions; the public academic view kept four masks. Merged label/value GPA tokens were canonicalized after observing an actual OCR variation, with a regression test for choice preservation.
+- Browser: at 390×844, the collapsed review panel was 135px high and anchored at the bottom (bottom=844); expanded height was 692px and remained bottom anchored. Field selection collapsed the panel, highlighted the region and selected 100%. Fit returned to the full image. The AI consent notice was visible on demand and Analyze stayed disabled without consent.
+- Browser: added a manual mask, went home, resumed, switched sharing context, and observed the same added mask retained (five masks including one manual). Undo last mask returned the count to four. The final export dialog still included academic context, four masks and two default-masked review fields for University submission; download stayed disabled before final confirmation.
+- Automated checks: 65 tests passed, including the existing regression suite and new preset validity, purpose follow-up, conservative policy mapping, recognition-language resolution and merged-token GPA reconciliation tests. Split delivery heading/identifier columns are also linked so an order lookup can keep its number after automatic reading. JavaScript syntax, unique/matching element IDs and whitespace checks passed. No new framework or production build step was introduced.
+- Final fresh-entry check: type correction and fine-tuning disclosures were closed, and Continue was disabled before a sharing choice. Delivery auto-reading linked the split order heading and number; Official support required a purpose and lookup kept the order visible. Unmatched earlier name/address/payment regions remained explicitly reviewable.
+- Screenshots: `qa/guided-landing.png`, `qa/guided-context.png`, `qa/guided-workspace.png`, `qa/guided-mobile.png`, `qa/guided-mobile-review.png`. Browser console had no warnings or errors in the final flow.
+- Local preview remains at localhost:4173. Production deployment was not performed. No new provider call or native file download was needed for this UI change; the prior PNG pixel verification remains in the entries below. Automatic real-upload scanning uses the same tested start routine as examples after existing file decoding/validation; a new native file-picker run was not repeated in this pass.
+
+## Context-aware document upgrade — 27 October 2026
+
+Implemented scope: delivery/order, academic transcript, chat conversation and General fallback. The older entries below describe prior behavior.
+
+- Added deterministic local keyword-group classification with manual correction, a manual-choice lock, and an explicit return to the local suggestion. Unknown/unsupported or tied types fall back to General; there is no claimed classification probability.
+- Added type-specific recipient/purpose registries, local-only custom purpose and recipient notes, and explicit Redact / Keep / Review recommendations. Review defaults to masked; user overrides are separate and persist across context changes.
+- Added shared browser/server field categories for student ID, birth date, academic content, private messages and credentials. Local token spans keep identifiers separate from GPA; nearby same-baseline label/value columns are linked conservatively.
+- Added same-image reconciliation using exact normalized text, category and unique strong geometric overlap/containment. Reliable matches inherit choices and retain the union of covered pixels; unmatched covered regions or explicit choices remain flagged for review. Numbered field IDs alone never determine a match.
+- Three fictional canvas examples are available. New example text regions use canvas font measurements and padding. Pre-labelled examples are explicitly distinguished from actual recognition.
+- Browser: transcript showcase displayed 12 fields with 4 masks and useful academic content visible. Non-public job application marked the name Review; organization submission additionally marked the student ID Review. Both stayed masked by default. A user-revealed ID survived a switch back to public showcase with a visible user-choice notice. Use suggestion restored the mask.
+- Browser: manual General correction survived actual OCR on the transcript; Use local suggestion then selected Transcript and replaced the purpose options. Custom purpose masked academic content for review and retained its local description.
+- Actual English transcript OCR: 50 words, 12 local field suggestions, zero unmatched previous regions on the final example. An earlier repeat-scan check retained a user-selected GPA mask and restored its override. Split label/value handling was added after inspecting real OCR results and has regression coverage.
+- Actual AI classification on the fictional transcript succeeded through the configured provider: 12 OCR-positioned fields, zero unmatched previous regions. This is one functional integration check, not an accuracy benchmark. No real user document was sent.
+- Final chat OCR read 52 words and found three local fields; the pre-labelled private message remained as one unmatched protected region, for four fields total and one default-masked Review. Browser: chat classification used chat heading/status/timestamp signals and replaced delivery purposes with conversation/reporting purposes. Credentials remained recommended Hide and private messages required review. Non-text details still require manual masks.
+- Browser export: showcase used 4 masks; custom used 12, with 8 unconfirmed Review fields still masked. The downloaded custom PNG was copied into `qa/transcript-custom.png` and inspected: all 12 declared rectangles were fully opaque RGBA (32,43,36,255), dimensions were 760×1030, and PNG metadata was empty. Showcase download path could not be read from the OS Downloads folder, so exact pixel inspection is claimed only for the custom file; the showcase preview and selection count were checked in the browser.
+- Browser: importing that fictional exported image cleared fields, added masks, overrides, recipient/purpose, custom notes, manual type and AI consent. It started as General with no audience selected and no assumed purpose.
+- Provider credentials stay server-side; context classification/policy and custom notes stay local. AI only receives consented OCR text/layout. Local preprocessing is not claimed to anonymize that text.
+- Final responsive checks at 390×844, 768×1024, 1024×768 and 1440×600 showed no horizontal document overflow. Review fields appear before Hide fields and useful Keep fields; this display sorting does not change mask identity.
+- Automated verification: 59 tests passed, including existing regressions and new classification/fallback, purpose isolation, contextual policy, default Review, credentials, override/reconciliation and local span cases. No framework/build migration; Vercel remains buildless with the existing API route. Production deployment was not performed.
+
+## Editor layout and context undo — 27 October 2026
+
+- Moved sharing context before local recognition; collapsed context rationale, scanning explanations and optional AI controls. The transfer notice stays beside AI consent inside the expanded controls.
+- Desktop preview and review panels follow document scrolling. Results alone scroll internally, with export outside that region. Tablet and phone layouts return to normal flow as appropriate.
+- Added dimension-based Fit, continuous zoom, explicit 100%, selected-result highlighting and Suggested / Your choice labels.
+- All 46 Node tests passed. New coverage checks portrait/landscape/long-image fitting, unmeasured stages and changes in mask visibility. JavaScript syntax and whitespace checks passed.
+- Browser exercised all 16 audience/purpose combinations. Undo restored a user-overridden full-name switch and the previous audience. A manually drawn mask survived context change and undo (mask counts 6 → 7 → 6).
+- Browser checked 390×844, 768×1024, 1024×768, 1440×600 and 1440×1000 layouts; no horizontal document overflow. At the 600px desktop height, the export button stayed inside the viewport after locating a field.
+- At Fit, 100%, 125% and back to 100%, the phone mask's DOM position and dimensions matched its image coordinates to within 0.01 CSS pixels. Selected field card and image highlight were visible together on desktop.
+- Local OCR completed on the fictional sample: 84 words and three local suggestions. Optional AI controls showed the transfer notice, required consent to enable classification, and made no provider call. Browser console contained no warnings/errors during the checked flow.
+- Downloaded a 760×1030 PNG with no metadata. Pixel inspection confirmed all five support-private rectangles were fully opaque, the order number stayed visible, and the extra manual rectangle occupied (126,510)–(564,570). Copy saved to `qa/editor-redesign-export.png`.
+- Source changes remain local. Live AI accuracy and production deployment were not evaluated in this pass.
+
+## Audience and purpose selection — 27 October 2026
+
+- Replaced the two delivery-specific choices with four audiences and four independent purposes. Default: public audience + advice. Only official support + order/delivery lookup retains suggested order/tracking numbers.
+- `npm test`: all 43 tests passed, including all 16 policy combinations, unknown/missing choices, sample/OCR consistency and explanation/summary agreement. JavaScript syntax and `git diff --check` passed.
+- Local browser: exercised all 16 audience/purpose combinations on the fictional sample. Official support + lookup showed five masks and a visible order number; every other combination showed six masks. Exactly one audience stayed selected.
+- Export review showed the selected audience and purpose, five masks, and the order number as visible for official support + lookup. The image renderer itself is unchanged.
+- Responsive browser checks at 390 × 844 and 1440 × 1000: no horizontal document overflow. Phone screenshot saved locally at `qa/sharing-context-mobile.png`.
+- Optional AI prompt now describes chats, bookings, study and work materials using the existing category schema. No live AI call was made; accuracy on these screenshot types remains unverified. Private message content and internal information still require manual review.
+- Changes are local; no production deployment was performed.
+
 # Verification record
 
 ## Click recognized text lines to mask — 26 October 2026
@@ -98,3 +155,16 @@ Verified 19 October 2026 against the local browser preview.
 - Browser console: no errors or warnings during tested interactions.
 
 Not evaluated: actual OCR/detection (not implemented), real-world detection accuracy, accessibility with a screen reader, and participant study outcomes. These checks establish prototype behavior, not privacy effectiveness across arbitrary images.
+
+### Adaptive image workspace and review (October 2026)
+
+- The desktop editor calculates a centered workspace width from the image proportions and available height; the review panel defaults to 380 px and can be adjusted in More options → Advanced settings. Long images initially fit to width; Fit shows the whole image. Narrow screens use the collapsible review sheet.
+- On the fictional transcript, switching to public academic sharing left the eight suggested visible regions masked until they were explicitly reviewed and confirmed. Existing manual choices and other masks stayed in place. A test AI request using this fictional image classified existing regions, and its insight links located the corresponding review item.
+- Automated checks cover portrait, square, landscape and long-image layout calculations, safe context updates, rescan mask preservation, and unambiguous AI insight attribution. Local OCR, AI, overlays and export still require users to check the entire image; overlapping masks can cover a field set to visible.
+
+### Workspace, context and OCR ID handling — 27 October 2026
+
+- At a 1440 × 900 desktop viewport, the fictional order workspace measured 1122 px with a 380 px review panel. Inspect enlarged the image to 90%; Pan moved the preview without changing the nine active masks. Mobile context keeps its close button and actions visible while the body scrolls.
+- The same active-mask selection feeds preview layers, count summaries and flattened export. In the fictional order, changing one of nine detected details to visible produced eight hidden fields and eight export masks, with the export confirmation explaining possible overlaps.
+- The order classifier now requires independent retail signals and recognizes singular “Order Detail”, order date, shipping address and order total. Optional AI classifications may offer a type suggestion only when two independent classified word groups support it; the user must apply it.
+- AI responses may reuse a valid OCR ID across different classifications; duplicate IDs within a field are deduplicated. An unknown ID triggers one complete provider retry with the same consented OCR text; a second invalid result fails atomically and preserves prior masks. Malformed responses do not retry. A real call on the fictional delivery sample completed successfully; mocked tests verify overlapping IDs, invalid-ID retry and atomic failure. These checks do not reproduce the user's specific screenshot or prove detection completeness.
