@@ -14,6 +14,7 @@ const files = new Map([
   ['/mask-geometry.js', ['mask-geometry.js', 'text/javascript; charset=utf-8']],
   ['/ocr.js', ['ocr.js', 'text/javascript; charset=utf-8']],
   ['/ocr-core.js', ['ocr-core.js', 'text/javascript; charset=utf-8']],
+  ['/technical-detection.js', ['technical-detection.js', 'text/javascript; charset=utf-8']],
   ['/contextual-detection.js', ['contextual-detection.js', 'text/javascript; charset=utf-8']],
   ['/sharing-context.js', ['sharing-context.js', 'text/javascript; charset=utf-8']],
   ['/editor-geometry.js', ['editor-geometry.js', 'text/javascript; charset=utf-8']],

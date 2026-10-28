@@ -145,7 +145,7 @@ function normalizeContext() {
   if (!config.purposes.includes(state.purpose)) state.purpose = '';
 }
 function setSample(kind = state.sampleKind) {
-  if (!['delivery', 'transcript', 'chat'].includes(kind)) return;
+  if (!['delivery', 'transcript', 'chat', 'technical_screenshot'].includes(kind)) return;
   state.loadId++; clearDetection(); hoveredField = null;
   state.sampleKind = kind; state.documentType = kind; state.typeSource = 'sample';
   state.typeReason = 'Fictional sample type supplied. Scan locally to test recognition, or correct it yourself.';
@@ -748,7 +748,7 @@ $('detectButton').addEventListener('click', async () => {
   const document = state.ocrDocument;
   const controller = new AbortController(); detectionController = controller;
   const timeout = setTimeout(() => controller.abort(), 100_000);
-  state.detecting = true; state.phase = 'ai'; state.aiStatus = 'processing'; setDrawing(false); render(); setAIStatus('Sending recognized text and its layout to the configured AI provider. The image stays on this device…');
+  state.detecting = true; state.phase = 'ai'; state.aiStatus = 'processing'; setDrawing(false); render(); setAIStatus('Screening likely credentials locally, then sending the screened text and layout to the configured AI provider. Other personal text may remain. The image stays on this device…');
   try {
     const payload = textPayload(document);
     const result = await readAPI(await fetch('/api/ai?action=classify-text', {

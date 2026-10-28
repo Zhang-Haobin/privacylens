@@ -2,9 +2,13 @@ export const documentTypes = {
   delivery: { label: 'Delivery / order', purposes: ['share', 'advice', 'lookup', 'return', 'custom'], audiences: ['public', 'circle', 'team', 'support'] },
   transcript: { label: 'Academic transcript', purposes: ['showcase', 'job', 'submission', 'custom'], audiences: ['public', 'circle', 'organization'] },
   chat: { label: 'Chat conversation', purposes: ['post', 'advice', 'report', 'custom'], audiences: ['public', 'circle', 'team', 'organization'] },
+  technical_screenshot: { label: 'Technical screenshot', purposes: ['technical_help', 'software_support', 'team_debug', 'custom'], audiences: ['public', 'support', 'team'] },
   general: { label: 'General / other', purposes: ['share', 'advice', 'submit', 'custom'], audiences: ['public', 'circle', 'team', 'organization'] }
 };
 export const purposeRegistry = {
+  technical_help: { label: 'Ask for technical help online', keep: 'Error messages, software versions, relevant stack frames and line numbers.' },
+  software_support: { label: 'Contact software support', keep: 'The error code, software version and relevant diagnostic details. Review any requested account identifier.' },
+  team_debug: { label: 'Debug with colleagues', keep: 'Useful stack frames, method names, versions and relevant project context. Review internal network details.' },
   share: { label: 'Share an update', keep: 'The relevant update, status and dates.' },
   advice: { label: 'Ask for advice', keep: 'The question and enough non-private context to help.' },
   lookup: { label: 'Find an order or delivery', keep: 'The delivery status and relevant dates.' },
@@ -23,6 +27,14 @@ export function purposesFor(type) { return (Object.hasOwn(documentTypes, type) ?
 export function classifyDocument(document) {
   const text = (document?.lines || []).map(line => line.text).join('\n').normalize('NFKC').replace(/(?<=\p{Script=Han})\s+(?=\p{Script=Han})/gu, '');
   const groups = {
+    technical_screenshot: [
+      [/(?:^|\n)\s*(?:(?:[\w.]+)?(?:TypeError|ReferenceError|SyntaxError|NullPointerException|\w+Exception)(?:\s*:|\b)|Traceback\s*\(most recent call last\))/im, 'An exception or traceback'],
+      [/(?:^|\n)\s*(?:at\s+[\w.$<>]+\s*\([^\n]*:\d+\)?|File\s+["'][^\n]+["'],?\s+line\s+\d+)/im, 'A stack frame with a file and line number'],
+      [/(?:^|\n)\s*(?:[$>]\s*)?(?:npm\s+(?:run|install|start|test)|pip\s+install|(?:node|python\d?|java|curl)\s+\S+)/im, 'A terminal command'],
+      [/(?:^|\n)\s*(?:Error\s*:|npm\s+(?:ERR!|error)|(?:GET|POST|HTTP)\s+[^\n]*(?:401|403|500)|Failed to fetch\b|Connection refused\b|Permission denied\b)/im, 'A diagnostic error line'],
+      [/(?:^|\n)\s*(?:export\s+)?(?:API[\s_-]*KEY|ACCESS[\s_-]*TOKEN|CLIENT[\s_-]*SECRET|DATABASE_URL|Authorization)\s*[:=]/im, 'A technical configuration or authorization label'],
+      [/\b(?:Node\.js\s+v?\d+\.\d+|Python\s+\d+\.\d+|Java\s+(?:version\s+)?\d+|Chrome\/\d+|npm\s+v?\d+\.\d+)/i, 'A named software runtime version']
+    ],
     transcript: [
       [/academic\s+transcript|transcript\s+of\s+(?:academic\s+)?record|成績單|成绩单/i, 'An academic transcript heading'],
       [/\b(?:c?gpa|grade\s+point\s+average)\b|平均績點|平均绩点/i, 'GPA terminology'],

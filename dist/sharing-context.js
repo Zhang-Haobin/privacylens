@@ -12,8 +12,11 @@ export function recommendField(field, { documentType = 'general', context = '', 
   const type = field.category || field.id;
   const result = (action, reason) => ({ action, reason });
   const allowed = Object.hasOwn(documentTypes, documentType) && (documentTypes[documentType].audiences.includes(context)) && purposesFor(documentType).includes(purpose);
-  if (type === 'secret') return result('redact', 'Access codes, passwords and tokens should stay out of the shared copy, including custom requests.');
+  if (type === 'secret') return result('redact', 'Keep passwords, access codes and tokens out of the shared copy. Masking does not revoke an exposed credential; rotate or revoke it if it was disclosed.');
   if (field.retained) return result('review', 'Kept from earlier coverage because this region or choice could not be matched reliably in the latest scan. Recheck it.');
+  if (type === 'personal_path') return result('redact', 'A personal directory can disclose a username or private project. The whole OCR word is covered; adjust the box if needed.');
+  if (type === 'internal_endpoint') return result('review', 'This may be an internal host or private network address, but that alone does not establish confidentiality. Confirm whether this recipient needs it.');
+  if (allowed && documentType === 'technical_screenshot' && context === 'support' && purpose === 'software_support' && type === 'account') return result('review', 'Software support may need an account identifier. Verify the channel and request before revealing it; credentials should remain hidden.');
   const academic = ['university', 'course', 'grade', 'gpa'].includes(type);
   if (allowed && documentType === 'transcript' && ['showcase', 'job', 'submission'].includes(purpose)) {
     if (academic) return result('keep', purpose === 'showcase' ? 'This academic information is relevant to showcasing your achievements.' : 'This academic information is relevant to the selected application or submission.');

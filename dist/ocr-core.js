@@ -2,6 +2,7 @@
 export { shouldHide } from './sharing-context.js';
 import { textCategories, categoryNames } from './privacy-types.js';
 import { contextualDeliverySuggestions } from './contextual-detection.js';
+import { sanitizeOCRLines, technicalSuggestions } from './technical-detection.js';
 export { textCategories, categoryNames };
 const roleNames = { sender: 'Sender', recipient: 'Recipient', unknown: '', merchant: 'Merchant' };
 const area = b => Math.max(0, b.x1 - b.x0) * Math.max(0, b.y1 - b.y0);
@@ -52,10 +53,11 @@ export function makeDocument(pages, width, height, inputWidth, inputHeight) {
 }
 export function textPayload(document) {
   const { width, height } = document;
-  return { width, height, consent: true, lines: document.lines.map(line => ({ id: line.id, words: line.words.map(word => {
+  const lines = document.lines.map(line => ({ id: line.id, words: line.words.map(word => {
     const b = word.bbox;
     return { id: word.id, text: word.text, box: [b.x0 / width, b.y0 / height, (b.x1 - b.x0) / width, (b.y1 - b.y0) / height].map(n => Math.round(n * 10000) / 10000) };
-  }) })) };
+  }) }));
+  return { width, height, consent: true, lines: sanitizeOCRLines(lines).lines };
 }
 const normalized = text => text.toUpperCase().replace(/[^A-Z0-9]/g, '');
 function wordsInSpan(line, start, end) {
@@ -193,6 +195,7 @@ export function localSuggestions(document) {
     }
   }
   fields.push(...contextualDeliverySuggestions(document, fields));
+  fields.push(...technicalSuggestions(document));
   return fields;
 }
 export function validateClassifications(fields, document) {

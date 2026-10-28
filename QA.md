@@ -1,3 +1,12 @@
+## Technical screenshots and pre-send credential screening — 28 October 2026
+
+- Added one technical type, local credential/path/internal-network candidates and three technical sharing tasks using the existing pipeline. Browser OCR payloads now use locally screened copies; original text, IDs and editing geometry stay local and unchanged. Server screening adds defense in depth, with the same screened representation on retry.
+- `npm test`: 105 passed. Existing 9-image OCR checks: 21/21 passed. Replay of 15 prior independently evaluated OCR documents: all types unchanged and zero lost previously covered pixels.
+- The new 14-image synthetic English development corpus classified 14/14 types, fully covered 22/22 annotated sensitive fields (including 14 credentials) and left 42/42 public controls unmasked. These are limited development-set results.
+- Actual browser HTTP requests were captured for the built-in technical example and two independently annotated images. All three client POSTs and all six stubbed provider requests excluded known test credentials; each real invalid-ID retry reused identical screened user text. No remote model calls were made.
+- Two actual browser-downloaded terminal PNGs, before and after AI/box adjustment/context changes, fully covered 3/3 independent sensitive regions, preserved 4/4 public controls and had no unexpected changes outside opaque masks or embedded text/EXIF. The adjusted output added 280 mask pixels and lost none. User reveal and edited box geometry survived classification. Desktop and mobile consent/review UI checked; no browser warnings/errors observed.
+- Details, files, algorithm, reproduction commands and limitations: `accuracy-lab/technical/REPORT.md`. Not deployed; real model behavior and general detection accuracy were not established.
+
 ## Intro, Upload and Workspace navigation — 28 October 2026
 
 - Added a buildless Intro using HTML/CSS and a small JS module, with no new dependencies or media downloads. The fictional demo uses the existing `recommendField` delivery policy; Public and Friends conceal the same personal fields, while an official-support order lookup can reveal only the order number. The text reminds users to verify the channel and review the result. The demo does not perform recognition or make API requests.

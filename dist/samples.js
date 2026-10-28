@@ -1,4 +1,5 @@
 export const extraSamples = {
+  technical_screenshot: { label: 'Technical screenshot', type: 'technical_screenshot' },
   transcript: { label: 'Academic transcript', type: 'transcript' },
   chat: { label: 'Chat conversation', type: 'chat' }
 };
@@ -14,7 +15,31 @@ export function drawExtraSample(canvas, kind) {
   };
   const fields = [];
   const field = (id, category, name, rect, anchor) => fields.push({ id, category, name, rect, anchor, source: 'sample', userOverride: null });
-  if (kind === 'transcript') {
+  if (kind === 'technical_screenshot') {
+    text('DEMO CONSOLE', 48, 70, 32, '#245c49', 600);
+    text('Fictional diagnostics / no real credentials', 48, 110, 19, '#62785b');
+    box(40, 148, 680, 790, '#f3f6ef');
+    const mono = (value, y, color = '#284536') => { c.font = '20px Menlo, Consolas, monospace'; c.fillStyle = color; c.fillText(value, 60, y); };
+    mono('$ npm run start', 195);
+    mono('Node.js v22.9.0', 240);
+    mono('TypeError: Cannot read properties of undefined', 305, '#8a4939');
+    mono('  at loadProfile (app.js:42:7)', 350);
+    mono('HTTP 401 Unauthorized', 395);
+    const synthetic = [
+      ['api', 'secret', 'Fictional API key', 'API_KEY=', 'demo_SECRET_K7p4x9Q2', 470],
+      ['path', 'personal_path', 'Personal file path', 'File: ', '/Users/alex/private-project/config.js', 540],
+      ['email', 'email', 'Personal email', 'User: ', 'alex@example.com', 610],
+      ['host', 'internal_endpoint', 'Internal host', 'Host: ', 'build.corp.local', 680]
+    ];
+    for (const [id, category, name, prefix, value, y] of synthetic) {
+      mono(prefix + value, y);
+      c.font = '20px Menlo, Consolas, monospace';
+      field(id, category, name, [Math.floor(60 + c.measureText(prefix).width) - 4, y - 24, Math.ceil(c.measureText(value).width) + 8, 32], value);
+    }
+    mono('Docs: https://developer.mozilla.org', 755);
+    mono('Keep the error. Protect the personal details.', 835, '#62785b');
+    text('Pre-labelled fictional regions. OCR can miss text.', 60, 900, 18, '#62785b');
+  } else if (kind === 'transcript') {
     text('EXAMPLE UNIVERSITY', 56, 76, 34, '#245c49', 600);
     field('university', 'university', 'University', valueRect('', 'EXAMPLE UNIVERSITY', 56, 76, 34, 600), 'EXAMPLE UNIVERSITY');
     text('ACADEMIC TRANSCRIPT', 56, 126, 20, '#62785b', 600);
