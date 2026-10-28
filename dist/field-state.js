@@ -20,7 +20,7 @@ const sameRegion = (a, b) => {
   return intersect / Math.max(1, larger + smaller - intersect) >= 0.55 || (intersect / Math.max(1, smaller) >= 0.85 && larger / Math.max(1, smaller) <= 10);
 };
 export function reconcileFields(previous, incoming) {
-  const matches = incoming.map(field => previous.filter(old => (old.category || old.id) === field.category && fieldText(old) && fieldText(old) === fieldText(field) && sameRegion(old.rect, field.rect)));
+  const matches = incoming.map(field => previous.filter(old => (old.category || old.id) === field.category && fieldText(old) && fieldText(old) === fieldText(field) && sameRegion(old.matchingRect || old.rect, field.rect)));
   const used = new Set(); let restored = 0;
   const fields = incoming.map((field, i) => {
     const old = matches[i].length === 1 ? matches[i][0] : null;
@@ -28,12 +28,13 @@ export function reconcileFields(previous, incoming) {
     if (!unique) return { ...field, userOverride: null };
     used.add(old);
     if (old.userOverride) restored++;
-    // Retain all already-covered pixels when a matched detector box shrinks.
+    // A user-edited box is authoritative. Automatic boxes retain the union so
+    // a later OCR pass cannot silently uncover previously protected pixels.
     const x = Math.min(old.rect[0], field.rect[0]), y = Math.min(old.rect[1], field.rect[1]);
-    const rect = [x, y, Math.max(old.rect[0] + old.rect[2], field.rect[0] + field.rect[2]) - x, Math.max(old.rect[1] + old.rect[3], field.rect[1] + field.rect[3]) - y];
-    return { ...field, id: old.id, rect, userOverride: old.userOverride || null, pendingReveal: old.pendingReveal || false };
+    const rect = old.geometryOverride ? [...old.rect] : [x, y, Math.max(old.rect[0] + old.rect[2], field.rect[0] + field.rect[2]) - x, Math.max(old.rect[1] + old.rect[3], field.rect[1] + field.rect[3]) - y];
+    return { ...field, id: old.id, rect, geometryOverride: old.geometryOverride || false, matchingRect: old.geometryOverride ? [...field.rect] : null, userOverride: old.userOverride || null, pendingReveal: old.pendingReveal || false };
   });
-  const retained = previous.filter(field => !used.has(field) && (field.hidden || field.userOverride));
+  const retained = previous.filter(field => !used.has(field) && (field.hidden || field.userOverride || field.geometryOverride));
   fields.push(...retained.map(field => ({ ...field, retained: true })));
   return { fields, restored, retained: retained.length };
 }

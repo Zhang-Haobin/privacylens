@@ -1,0 +1,123 @@
+/* A lightweight introduction; all illustration is HTML and CSS. */
+.entry-nav { display: flex; align-items: center; gap: 14px; }
+.intro-return { margin-top: 14px; }
+body.welcoming { background: radial-gradient(ellipse at 85% 25%, #325d48 0, transparent 52%), #143b30; color: #f5f1e6; }
+.welcoming .topbar { background: transparent; border-color: #f1efdf25; height: 88px; padding-inline: max(40px, calc((100vw - 1320px) / 2)); }
+.welcoming .brand { color: #f5f1e6; }
+.welcoming .brand-mark { background: #e4ebd9; color: #204b3b; box-shadow: none; }
+.welcoming .text-button { color: #e2e7d9; }
+.welcoming .text-button:hover { background: #ffffff0d; border-color: #f1efdf30; }
+.welcoming main { width: min(100% - 80px, 1320px); }
+.welcome-page { padding-top: 60px; }
+.welcome-hero { display: grid; grid-template-columns: 1.05fr 1fr; align-items: center; gap: clamp(36px, 6vw, 100px); padding-bottom: 65px; }
+.welcome-eyebrow { color: #c7d7b9; font-size: 10px; font-weight: 600; letter-spacing: 2.6px; display: flex; align-items: center; gap: 11px; }
+.welcome-eyebrow > span { width: 7px; height: 7px; background: #b5ca9c; border-radius: 50%; }
+.welcome-copy h1 { font-size: clamp(52px, 5.5vw, 80px); line-height: 1.04; letter-spacing: -2.8px; margin: 28px 0; color: #f7f2e6; }
+.welcome-copy h1 em { color: #c1d0ab; font-weight: 400; }
+.welcome-description { font-size: 16px; line-height: 1.85; color: #c3cfc0; }
+.welcome-actions { margin-top: 32px; display: flex; align-items: flex-start; flex-direction: column; gap: 18px; }
+.welcome-primary { min-height: 53px; display: inline-flex; justify-content: space-between; align-items: center; gap: 42px; padding: 14px 22px; border: 1px solid #e2e9d0; border-radius: 7px; background: #e2e9d0; color: #1d4435; font-size: 14px; font-weight: 600; }
+.welcome-primary:hover { background: #f4f4e7; border-color: #f4f4e7; box-shadow: 0 5px 22px #00000015; }
+.welcome-primary svg { transition: transform .2s; }
+.welcome-primary:hover svg { transform: translateX(3px); }
+.welcome-resume { background: transparent; color: #e2e9d0; border: 0; border-bottom: 1px solid #c1d0ab66; padding: 4px 0; text-align: left; font-size: 13px; }
+.welcome-local { margin-top: 20px; font-size: 11px; color: #b7c7b4; display: flex; align-items: center; gap: 7px; }
+.welcome-local svg { width: 13px; height: 13px; }
+.welcome-demo { min-width: 0; max-width: 510px; width: 100%; justify-self: end; }
+.demo-caption { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; margin-bottom: 13px; font-size: 9px; letter-spacing: 1.2px; color: #c2d0b8; }
+.demo-caption > span:last-child { margin-left: auto; font-size: 8px; letter-spacing: .8px; }
+.demo-caption-dot { width: 5px; height: 5px; border-radius: 50%; background: #bacaa7; }
+.demo-receipt { position: relative; overflow: hidden; border-radius: 12px; background: #fafbf6; border: 1px solid #e7ecdc; color: #314635; box-shadow: 0 24px 65px #061a2840, 0 0 0 7px #e1eadb08; }
+.demo-window { height: 35px; display: flex; align-items: center; gap: 5px; padding: 0 17px; background: #eaf0e4; border-bottom: 1px solid #dce4d5; color: #6a7d63; }
+.demo-window > span { width: 5px; height: 5px; background: #a4b299; border-radius: 50%; }
+.demo-window small { flex: 1; text-align: center; font-size: 9px; letter-spacing: .5px; }
+.demo-window svg { width: 10px; height: 10px; }
+.demo-receipt-content { padding: 20px 26px 12px; }
+.demo-store { display: flex; align-items: center; justify-content: space-between; padding-bottom: 16px; border-bottom: 1px solid #e0e6d9; gap: 10px; }
+.demo-store strong { font-size: 28px; line-height: 1; letter-spacing: -1px; color: #315a44; }
+.demo-store > span { font-size: 7px; letter-spacing: 1.2px; color: #73826b; }
+.demo-order-row { display: flex; align-items: center; justify-content: space-between; padding: 16px 0; gap: 10px; font-size: 12px; font-weight: 500; }
+.demo-order-row .demo-sensitive { font-size: 10px; font-weight: 400; }
+.demo-sensitive { position: relative; display: inline-block; width: fit-content; max-width: 100%; line-height: 1.6; vertical-align: middle; isolation: isolate; border-radius: 3px; }
+.demo-cover { position: absolute; inset: -1px -3px; z-index: 1; background: #244c3b; border-radius: 3px; transform: scaleX(0); transform-origin: left; transition: transform .42s cubic-bezier(.22,.68,.25,1); }
+.demo-sensitive.is-covered .demo-cover { transform: scaleX(1); }
+.demo-delivery { padding: 18px 20px 14px; border-radius: 7px; background: #edf1e5; }
+.demo-delivery-tag { display: inline-block; padding: 3px 7px; border-radius: 4px; background: #e5e5cb; color: #726d39; font-size: 7px; letter-spacing: 1px; }
+.demo-delivery h2 { font-family: Georgia, serif; font-size: 28px; font-weight: 400; letter-spacing: -.7px; margin: 10px 0 4px; }
+.demo-delivery p { font-size: 10px; color: #697a60; }
+.demo-track { display: flex; justify-content: space-between; align-items: center; position: relative; margin: 19px 4px 7px; }
+.demo-track::before { content: ''; position: absolute; height: 2px; background: linear-gradient(to right, #6f8b5c 50%, #ced8c3 50%); width: 100%; }
+.demo-track i { z-index: 1; width: 6px; height: 6px; background: #6f8b5c; border-radius: 50%; }
+.demo-track i:last-child { background: #ced8c3; }
+.demo-track-labels { display: flex; justify-content: space-between; font-size: 8px; color: #617755; }
+.demo-product { display: flex; align-items: center; gap: 11px; padding: 17px 0; border-bottom: 1px solid #e0e6d9; }
+.demo-product-icon { display: grid; place-items: center; width: 37px; height: 38px; border-radius: 6px; background: #e9eedf; color: #759066; }
+.demo-product-icon svg { width: 23px; height: 23px; }
+.demo-product strong { display: block; font-size: 10px; font-weight: 500; }
+.demo-product small { display: block; font-size: 9px; color: #76866b; }
+.demo-product > span:last-child { margin-left: auto; font-size: 10px; }
+.demo-details { display: grid; grid-template-columns: 1fr 1.15fr; column-gap: 18px; row-gap: 14px; padding: 15px 0 18px; }
+.demo-details > div > small { display: block; font-size: 7px; letter-spacing: 1px; color: #73826b; margin-bottom: 5px; }
+.demo-details .demo-sensitive { font-size: 12px; }
+.demo-address { grid-column: 1 / -1; }
+.demo-receipt-bottom { display: flex; align-items: center; justify-content: space-between; border-top: 1px solid #e0e6d9; padding-top: 10px; color: #75856c; font-size: 8px; }
+.demo-receipt-bottom svg { width: 13px; height: 13px; }
+.demo-context { padding-top: 23px; }
+.demo-context > p:first-child { font-size: 8px; letter-spacing: 1.3px; color: #c2d0b8; margin-bottom: 10px; }
+.demo-choices { display: grid; grid-template-columns: 1fr 1fr 1.25fr; gap: 6px; }
+.demo-choices button { min-height: 53px; text-align: left; padding: 9px 12px; border: 1px solid #e3ecd32b; border-radius: 6px; color: #d3decb; background: #143b3020; }
+.demo-choices button:hover { border-color: #b8cda7; }
+.demo-choices button[aria-pressed="true"] { color: #253f2f; border-color: #dce5ca; background: #dce5ca; }
+.demo-choices strong { display: block; font-size: 11px; font-weight: 600; }
+.demo-choices span { display: block; font-size: 9px; opacity: .85; margin-top: 1px; }
+.demo-explanation { color: #c3cfbb; font-size: 11px; line-height: 1.8; margin-top: 12px; min-height: 60px; }
+.welcome-principle { display: flex; align-items: center; justify-content: space-between; gap: 40px; border-top: 1px solid #f1efdf25; padding: 30px 0; }
+.welcome-principle > p { font-family: Georgia, serif; font-size: 21px; line-height: 1.5; color: #d9e0cc; }
+.welcome-principle > p em { color: #b5c7a5; }
+.welcome-principle ol { display: flex; gap: 28px; padding: 0; margin: 0; list-style: none; font-size: 11px; color: #d0dac6; }
+.welcome-principle li span { display: block; color: #96b18d; font-size: 9px; letter-spacing: 1px; margin-bottom: 5px; }
+.welcome-footer { padding: 16px 0 22px; border-top: 1px solid #f1efdf25; color: #b6c4ac; font-size: 10px; display: flex; justify-content: space-between; gap: 16px; }
+.demo-scan { display: none; pointer-events: none; position: absolute; inset: 35px 0 auto; height: 60px; border-bottom: 1px solid #73a774; background: linear-gradient(transparent, #9cbd7d33); }
+.demo-playing .demo-scan { display: block; animation: welcome-scan 2.8s ease-in-out forwards; }
+.demo-playing .demo-sensitive.is-covered .demo-cover { animation: welcome-cover 2.65s both; }
+.demo-playing .demo-details .demo-cover { animation-delay: .12s; }
+@keyframes welcome-scan { 0% { top: 35px; opacity: 0; } 12% { opacity: 1; } 85% { opacity: 1; } 100% { top: 100%; opacity: 0; } }
+@keyframes welcome-cover { 0%, 24% { transform: scaleX(0); background: #9ab77d40; box-shadow: 0 0 0 1px #83a96e; } 45% { background: #9ab77d40; transform: scaleX(1); } 70%, 100% { background: #244c3b; transform: scaleX(1); box-shadow: none; } }
+@media (max-width: 1000px) {
+  .welcome-hero { gap: 36px; }
+  .welcome-copy h1 { font-size: 55px; }
+  .welcome-principle ol { gap: 16px; }
+  .demo-receipt-content { padding-inline: 20px; }
+  .demo-caption > span:last-child { width: 100%; margin-left: 12px; }
+}
+@media (max-width: 760px) {
+  .welcoming .topbar { height: 74px; padding-inline: 22px; gap: 10px; }
+  .welcoming .brand { font-size: 21px; }
+  .welcoming .brand-mark { width: 31px; height: 35px; margin-right: 8px; }
+  .welcoming #aboutButton { display: none; }
+  .welcoming main { width: calc(100% - 44px); }
+  .welcome-page { padding-top: 40px; }
+  .welcome-hero { grid-template-columns: minmax(0, 1fr); gap: 42px; padding-bottom: 36px; }
+  .welcome-copy h1 { font-size: clamp(47px, 9vw, 66px); letter-spacing: -1.8px; margin: 22px 0; }
+  .welcome-description { font-size: 15px; }
+  .welcome-actions { margin-top: 24px; }
+  .welcome-demo { justify-self: center; }
+  .demo-caption > span:last-child { width: auto; margin-left: auto; }
+  .welcome-principle { display: block; padding: 26px 0; }
+  .welcome-principle ol { margin-top: 25px; justify-content: space-between; gap: 10px; font-size: 10px; }
+  .welcome-principle > p { font-size: 21px; }
+  .welcome-footer { font-size: 9px; flex-wrap: wrap; }
+}
+@media (max-width: 380px) {
+  .welcoming .topbar { padding-inline: 16px; }
+  .welcoming main { width: calc(100% - 32px); }
+  .demo-caption > span:last-child { width: 100%; margin-left: 12px; }
+  .demo-receipt-content { padding-inline: 16px; }
+  .demo-choices button { padding-inline: 8px; }
+  .demo-choices strong { font-size: 10px; }
+  .demo-delivery h2 { font-size: 25px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .welcome-page *, .welcome-page *::before, .welcome-page *::after { animation: none !important; transition: none !important; }
+  .demo-scan { display: none !important; }
+}

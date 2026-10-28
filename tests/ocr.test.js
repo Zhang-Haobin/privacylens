@@ -12,12 +12,12 @@ const completion = fields => Response.json({ choices: [{ finish_reason: 'stop', 
 const valid = { category: 'phone', role: 'recipient', wordIds: ['w2', 'w3', 'w4'] };
 const noFetch = async () => assert.fail('Invalid input must not reach provider');
 
-test('OCR scales each axis to original pixels and keeps the final phone digits covered', () => {
+test('OCR scales each axis to original pixels and covers the phone value without its label', () => {
   const scaled = makeDocument([page([word('Phone:', 40, 300, 160, 360), word('+852', 180, 300, 280, 360), word('9345', 300, 300, 400, 360), word('6721', 420, 300, 520, 360)])], 300, 200, 600, 600);
   const fields = suggestionsToFields(localSuggestions(scaled), scaled);
   assert.equal(fields.length, 1);
   const [x, y, width, height] = fields[0].rect;
-  assert.ok(x <= 20 && y <= 100 && x + width >= 260 && y + height >= 120);
+  assert.ok(x > 20 && x <= 90 && y <= 100 && x + width >= 260 && y + height >= 120);
 });
 
 test('two OCR passes deduplicate the same token but retain distinct repeated occurrences', () => {
@@ -55,6 +55,13 @@ test('local Chinese labels tolerate spaces inserted between OCR characters', () 
   assert.deepEqual(localSuggestions(doc).map(f => f.category), ['order', 'phone']);
 });
 
+test('Chinese order label split into OCR words masks only the identifier', () => {
+  const doc = makeDocument([page([word('訂單', 10, 10, 60, 30), word('號', 65, 10, 85, 30), word(':', 90, 10, 96, 30), word('HK20261025001', 110, 10, 290, 30)])], 300, 50, 300, 50);
+  const order = suggestionsToFields(localSuggestions(doc), doc).find(field => field.category === 'order');
+  assert.equal(order.anchor, 'HK20261025001');
+  assert.ok(order.rect[0] > 96);
+});
+
 test('client rejects unknown and freely positioned classifications while preserving overlapping fields', () => {
   for (const bad of [[{ ...valid, wordIds: ['w999'] }], [{ ...valid, box: [0, 0, 1, 1] }], [{ ...valid, category: 'face' }]]) {
     assert.throws(() => validateClassifications(bad, document));
@@ -69,7 +76,49 @@ test('local and AI phone suggestions combine into one switch without losing the 
   const fields = suggestionsToFields(classified, document);
   assert.equal(fields.length, 1);
   assert.equal(fields[0].role, 'recipient');
-  assert.ok(fields[0].rect[0] <= 20 && fields[0].rect[0] + fields[0].rect[2] >= 260);
+  assert.ok(fields[0].rect[0] > 20 && fields[0].rect[0] <= 90 && fields[0].rect[0] + fields[0].rect[2] >= 260);
+});
+
+test('identifier masks select the code, not nearby service text or the label', () => {
+  const doc = makeDocument([page([
+    word('TRK#', 10, 10, 60, 30), word('7750', 68, 10, 120, 30), word('9348', 128, 10, 180, 30), word('2211', 188, 10, 240, 30), word('INTL', 320, 10, 370, 30), word('PRIORITY', 380, 10, 480, 30),
+    word('Order', 10, 60, 80, 80), word('No', 85, 60, 108, 80), word('EB202610250987', 180, 60, 350, 80)
+  ])], 500, 120, 500, 120);
+  const fields = suggestionsToFields(localSuggestions(doc), doc);
+  const tracking = fields.find(field => field.category === 'tracking');
+  const order = fields.find(field => field.category === 'order');
+  assert.ok(tracking && order);
+  assert.deepEqual(tracking.wordIds.map(id => doc.words.find(word => word.id === id).text), ['7750', '9348', '2211']);
+  assert.deepEqual(order.wordIds.map(id => doc.words.find(word => word.id === id).text), ['EB202610250987']);
+  assert.ok(tracking.rect[0] > 60 && tracking.rect[0] + tracking.rect[2] < 320);
+  assert.ok(order.rect[0] > 108);
+});
+
+test('shipping postal codes, dates and destination universities are not academic fields', () => {
+  const doc = makeDocument([page([
+    word('CA', 10, 10, 35, 25), word('94108', 40, 10, 90, 25),
+    word('OCT', 10, 45, 45, 60), word('2026', 50, 45, 100, 60),
+    word('The', 10, 80, 45, 95), word('University', 50, 80, 130, 95), word('of', 135, 80, 155, 95), word('Hong', 160, 80, 210, 95), word('Kong', 215, 80, 265, 95)
+  ])], 300, 120, 300, 120);
+  assert.ok(!localSuggestions(doc).some(field => ['course', 'university'].includes(field.category)));
+});
+
+test('tracking value survives duplicated OCR punctuation after the label', () => {
+  const doc = makeDocument([page([word('TRACKING', 10, 10, 95, 30), word('#:', 100, 10, 120, 30), word('#:', 125, 10, 145, 30), word('1Z1234567890123456', 150, 10, 330, 30)])], 350, 60, 350, 60);
+  const field = suggestionsToFields(localSuggestions(doc), doc).find(field => field.category === 'tracking');
+  assert.equal(field.anchor, '1Z1234567890123456');
+  assert.ok(field.rect[0] > 145);
+});
+
+test('a repeated tracking number split into OCR words is covered without a neighboring label', () => {
+  const doc = makeDocument([page([
+    word('1Z', 10, 10, 28, 26), word('123', 32, 10, 60, 26), word('456', 64, 10, 92, 26), word('78', 96, 10, 112, 26), word('9012', 116, 10, 152, 26), word('345', 156, 10, 184, 26), word('6', 188, 10, 198, 26),
+    word('TRACKING', 10, 60, 88, 76), word('#:', 92, 60, 105, 76), word('1Z1234567890123456', 110, 60, 300, 76)
+  ])], 340, 100, 340, 100);
+  const fields = suggestionsToFields(localSuggestions(doc), doc).filter(field => field.category === 'tracking');
+  assert.equal(fields.length, 2);
+  const repeated = fields.find(field => field.rect[1] < 30);
+  assert.ok(repeated && repeated.rect[0] <= 10 && repeated.rect[0] + repeated.rect[2] >= 198);
 });
 
 test('address padding includes adjacent postal-code words omitted by AI, without crossing columns', () => {

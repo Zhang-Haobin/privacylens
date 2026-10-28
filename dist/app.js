@@ -8,6 +8,8 @@ import { reconcileFields, aiInsights, activeMasks, coverageSummary } from './fie
 import { drawExtraSample } from './samples.js';
 import { fitImageScale, workspaceLayout } from './editor-geometry.js';
 import { sharingProfiles, profileForContext } from './workflow.js';
+import { adjustMaskRect } from './mask-geometry.js';
+import { createIntroDemo, initialEntry, rememberIntro } from './intro.js';
 const $ = (id) => document.getElementById(id);
 const canvas = $('previewCanvas');
 const ctx = canvas.getContext('2d');
@@ -17,6 +19,15 @@ const previewMasks = new Map();
 const lineHighlight = document.createElement('div');
 lineHighlight.className = 'text-line-highlight'; lineHighlight.hidden = true;
 lineHighlight.setAttribute('aria-hidden', 'true'); maskLayer.after(lineHighlight);
+const adjustLayer = document.createElement('div'); adjustLayer.className = 'mask-adjust'; adjustLayer.hidden = true;
+lineHighlight.after(adjustLayer);
+for (const handle of ['nw', 'ne', 'sw', 'se', 'move']) {
+  const button = document.createElement('button'); button.type = 'button'; button.className = `mask-handle-${handle}`;
+  button.dataset.handle = handle;
+  button.setAttribute('aria-label', handle === 'move' ? 'Move mask with arrow keys or drag' : `Resize ${handle} corner with arrow keys or drag`);
+  button.textContent = handle === 'move' ? '↔' : '';
+  adjustLayer.append(button);
+}
 let textLines = [];
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 const maskAnimator = createMaskAnimator();
@@ -25,11 +36,33 @@ function motionEnabled() { return motionOverride ?? !reducedMotion.matches; }
 let previewLoadId = -1;
 const base = document.createElement('canvas');
 const b = base.getContext('2d');
-const state = { flow: 'landing', hasImage: false, sharingProfile: '', reviewExpanded: false, expandedField: null, context: 'public', purpose: 'advice', documentType: 'delivery', typeSource: 'sample', typeReason: '', sampleKind: 'delivery', customPurpose: '', recipientDetail: '', nextFieldId: 1, source: 'sample', view: 'protected', drawing: false, fields: [], manual: [], drag: null, filename: 'fictional-order.png', nextId: 1, loadId: 0, aiDetected: false, detecting: false, detectedModel: '', ocrDocument: null, phase: '', zoom: null, fitMode: 'auto', panning: false, reviewWidth: 380, aiStatus: 'idle', aiInsights: [], aiTypeSuggestion: null, highlighted: null };
+const state = { flow: 'landing', hasImage: false, sharingProfile: '', reviewExpanded: false, expandedField: null, context: 'public', purpose: 'advice', documentType: 'delivery', typeSource: 'sample', typeReason: '', sampleKind: 'delivery', customPurpose: '', recipientDetail: '', nextFieldId: 1, source: 'sample', view: 'protected', drawing: false, fields: [], manual: [], drag: null, adjusting: null, filename: 'fictional-order.png', nextId: 1, loadId: 0, aiDetected: false, detecting: false, detectedModel: '', ocrDocument: null, phase: '', zoom: null, fitMode: 'auto', panning: false, reviewWidth: 380, aiStatus: 'idle', aiInsights: [], aiTypeSuggestion: null, highlighted: null };
 let hoveredField = null;
 let contextOptionsType = null;
 let contextUndo = null;
 let contextFeedback = '';
+// Only the intro preference is persisted. Images and editing choices stay in memory.
+let entryStorage;
+try { entryStorage = window.localStorage; } catch { /* Private browsing can deny access. */ }
+state.flow = initialEntry(window.location.hash, entryStorage);
+const introDemo = createIntroDemo($('introDemo'), reducedMotion);
+const routeForFlow = () => state.flow === 'intro' ? '#intro' : state.flow === 'landing' ? '#upload' : '#workspace';
+history.replaceState(null, '', routeForFlow());
+function navigateEntry(flow) {
+  if (state.flow === 'intro' && flow !== 'intro') rememberIntro(entryStorage);
+  cancelDetection(); closeWorkDialogs();
+  state.flow = flow === 'review' && !state.hasImage ? 'landing' : flow;
+  render();
+  window.scrollTo({ top: 0, behavior: 'auto' });
+  $(state.flow === 'intro' ? 'introHeading' : state.flow === 'landing' ? 'uploadHeading' : 'previewHeading').focus({ preventScroll: true });
+}
+window.addEventListener('hashchange', () => {
+  const requested = window.location.hash;
+  const flow = requested === '#intro' ? 'intro' : requested === '#workspace' && state.hasImage ? 'review' : 'landing';
+  // A workspace link cannot restore an image after a page reload.
+  if (requested !== (flow === 'intro' ? '#intro' : flow === 'landing' ? '#upload' : '#workspace')) history.replaceState(null, '', flow === 'intro' ? '#intro' : '#upload');
+  navigateEntry(flow);
+});
 let detectionController = null;
 let detectionId = 0;
 const sampleFields = [
@@ -102,6 +135,7 @@ function cancelDetection() {
 }
 function clearDetection() {
   textLines = [];
+  state.adjusting = null;
   cancelDetection(); state.aiDetected = false; state.detectedModel = ''; state.aiStatus = 'idle'; state.aiInsights = []; state.aiTypeSuggestion = null; state.ocrDocument = null; state.highlighted = null; state.zoom = null; state.fitMode = 'auto'; clearContextChange(); $('aiConsent').checked = false;
   setAIStatus('Ready for local text recognition. AI assistance is optional.');
 }
@@ -159,6 +193,7 @@ function updateTypeFromText(document) {
   normalizeContext();
 }
 function receiveFields(incoming) {
+  state.adjusting = null;
   const candidates = incoming.map(field => ({ ...field, id: `scan-${state.nextFieldId++}` }));
   const previous = state.fields;
   const result = reconcileFields(previous, candidates);
@@ -299,12 +334,42 @@ function keepPreviewVisible() {
 function renderCanvas() {
   drawImage(canvas, false);
   renderMaskLayer(); updateCanvasSize();
+  renderAdjustLayer();
   if ((state.highlighted || hoveredField) && state.view === 'protected') {
     const field = state.fields.find(f => f.id === (hoveredField || state.highlighted));
     if (field) { ctx.strokeStyle = '#e7b71e'; ctx.lineWidth = Math.max(3, base.width / 220); ctx.strokeRect(...field.rect); }
   }
   if (state.drag) {
     const r = dragRect(); ctx.fillStyle = '#202b24'; ctx.fillRect(...r); ctx.strokeStyle = '#c6db7a'; ctx.lineWidth = Math.max(2, base.width / 350); ctx.strokeRect(...r);
+  }
+}
+function adjustedMask() {
+  if (!state.adjusting) return null;
+  const list = state.adjusting.type === 'field' ? state.fields : state.manual;
+  return list.find(mask => mask.id === state.adjusting.id) || null;
+}
+function renderAdjustLayer() {
+  const mask = adjustedMask();
+  adjustLayer.hidden = !mask || state.view !== 'protected';
+  if (!mask || adjustLayer.hidden) return;
+  const [x, y, width, height] = mask.rect;
+  Object.assign(adjustLayer.style, { left: `${x / base.width * 100}%`, top: `${y / base.height * 100}%`, width: `${width / base.width * 100}%`, height: `${height / base.height * 100}%` });
+}
+function setAdjusting(type, id) {
+  if (state.adjusting?.type === type && state.adjusting.id === id) state.adjusting = null;
+  else {
+    setDrawing(false); setPanning(false); state.view = 'protected'; state.zoom = 1;
+    state.adjusting = { type, id };
+    if (window.matchMedia('(max-width: 900px)').matches) state.reviewExpanded = false;
+    if (type === 'field') state.highlighted = id;
+  }
+  render();
+  if (state.adjusting) {
+    const [x, y, width, height] = adjustedMask().rect;
+    const stage = $('canvasStage');
+    stage.scrollLeft = Math.max(0, x + width / 2 - stage.clientWidth / 2);
+    stage.scrollTop = Math.max(0, y + height / 2 - stage.clientHeight / 2);
+    adjustLayer.querySelector('.mask-handle-move')?.focus({ preventScroll: true });
   }
 }
 function countMasks() { return activeMasks(state.fields, state.manual).length; }
@@ -342,7 +407,11 @@ function renderFields() {
     label.append(input, track, status);
     const info = document.createElement('button'); info.type = 'button'; info.className = 'field-info'; info.textContent = 'ⓘ'; info.setAttribute('aria-label', `Details for ${field.name}`); info.setAttribute('aria-expanded', String(state.expandedField === field.id));
     info.addEventListener('click', () => { state.expandedField = state.expandedField === field.id ? null : field.id; render(); document.querySelector(`#field-${field.id} .field-info`)?.focus({ preventScroll: true }); });
-    top.append(title, info, label);
+    const adjust = document.createElement('button'); adjust.type = 'button'; adjust.className = 'field-adjust'; adjust.textContent = state.adjusting?.id === field.id ? 'Done' : 'Adjust box';
+    adjust.setAttribute('aria-label', `Adjust box for ${field.name}`);
+    adjust.setAttribute('aria-pressed', String(state.adjusting?.type === 'field' && state.adjusting.id === field.id));
+    adjust.addEventListener('click', () => setAdjusting('field', field.id));
+    top.append(title, info, adjust, label);
     const reason = document.createElement('p'); reason.className = `field-reason ${field.hidden ? '' : 'keep'}`;
     const recommendation = field.recommendation;
     const source = field.retained ? 'Earlier protected region' : field.source === 'ai' ? 'AI text classification' : field.source === 'local' ? 'Local text recognition' : 'Fictional example';
@@ -372,7 +441,9 @@ function renderFields() {
     if (hidden) toggle.innerHTML = '<svg><use href="#i-x"/></svg>';
     else toggle.textContent = 'Restore';
     toggle.addEventListener('click', () => { mask.hidden = !hidden; render(); });
-    row.append(name, toggle); manualList.append(row);
+    const adjust = document.createElement('button'); adjust.type = 'button'; adjust.textContent = 'Adjust box'; adjust.setAttribute('aria-label', `Adjust box for ${maskName.toLowerCase()}`);
+    adjust.addEventListener('click', () => setAdjusting('manual', mask.id));
+    row.append(name, adjust, toggle); manualList.append(row);
   });
   const lineList = $('ocrLineList'); const lineScroll = lineList.scrollTop; lineList.replaceChildren();
   $('ocrLinesPanel').hidden = !textLines.length;
@@ -446,8 +517,11 @@ function render() {
   $('fileLabel').textContent = state.filename;
   $('originalView').classList.toggle('active', state.view === 'original'); $('originalView').setAttribute('aria-pressed', String(state.view === 'original'));
   $('protectedView').classList.toggle('active', state.view === 'protected'); $('protectedView').setAttribute('aria-pressed', String(state.view === 'protected'));
-  $('canvasHint').textContent = state.drawing ? 'Drag to add a mask · Click “Add a mask” to stop' : state.view === 'original' ? 'Original preview · Switch to Protected to change masks' : textLines.length ? 'Click any text line to mask it · Click a mask to reveal' : 'Click to remove · Click the same area to restore';
-  $('previewNote').textContent = state.drawing ? 'Drag over a detail, then choose Finish masking.' : state.view === 'original' ? 'Original preview — selected masks are still applied to export.' : textLines.length ? 'Hover over recognized text to see its line. Click to cover it; click again to reveal it.' : 'Click a mask to reveal the detail; click the same area again to cover it. Review the whole image.';
+  $('canvasHint').textContent = state.adjusting ? 'Drag the corners or center to correct the box · Arrow keys move one pixel' : state.drawing ? 'Drag to add a mask · Click “Add a mask” to stop' : state.view === 'original' ? 'Original preview · Switch to Protected to change masks' : textLines.length ? 'Click any text line to mask it · Click a mask to reveal' : 'Click to remove · Click the same area to restore';
+  $('previewNote').textContent = state.adjusting ? 'Adjust the selected box on the original image. Press Escape or Finish adjusting when done.' : state.drawing ? 'Drag over a detail, then choose Finish masking.' : state.view === 'original' ? 'Original preview — selected masks are still applied to export.' : textLines.length ? 'Hover over recognized text to see its line. Click to cover it; click again to reveal it.' : 'Click a mask to reveal the detail; click the same area again to cover it. Review the whole image.';
+  $('finishAdjustButton').hidden = !state.adjusting;
+  $('mobileDrawButton').textContent = state.adjusting ? 'Finish adjusting' : state.drawing ? 'Finish masking' : 'Add a mask';
+  $('mobileDrawButton').setAttribute('aria-pressed', String(Boolean(state.adjusting || state.drawing)));
   $('preserveNote').querySelector('strong').textContent = isSample ? 'The useful part stays.' : 'Review the whole image.';
   $('preserveNote').querySelector('p').textContent = isSample ? plan.keep : 'Sensitive details outside your masks will remain visible in the export.';
   $('undoButton').disabled = state.manual.length === 0;
@@ -470,10 +544,10 @@ function announce(message, { undo = false } = {}) {
   const close = document.createElement('button'); close.type = 'button'; close.textContent = '×'; close.setAttribute('aria-label', 'Dismiss notification'); close.addEventListener('click', () => { toast.hidden = true; }); toast.append(close);
   toast.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => { toast.hidden = true; }, 7000);
 }
-function setDrawing(enabled) { state.drawing = enabled; if (enabled) { state.reviewExpanded = false; setPanning(false); } state.drag = null; $('canvasWrap').classList.toggle('drawing', enabled); $('drawButton').setAttribute('aria-pressed', String(enabled)); $('drawButton').lastChild.textContent = enabled ? ' Finish masking' : ' Add a mask'; $('mobileDrawButton').setAttribute('aria-pressed', String(enabled)); $('mobileDrawButton').textContent = enabled ? 'Finish masking' : 'Add a mask'; $('drawHint').hidden = !enabled; if (enabled) state.view = 'protected'; }
+function setDrawing(enabled) { state.drawing = enabled; if (enabled) { state.adjusting = null; state.reviewExpanded = false; setPanning(false); } state.drag = null; $('canvasWrap').classList.toggle('drawing', enabled); $('drawButton').setAttribute('aria-pressed', String(enabled)); $('drawButton').lastChild.textContent = enabled ? ' Finish masking' : ' Add a mask'; $('mobileDrawButton').setAttribute('aria-pressed', String(enabled)); $('mobileDrawButton').textContent = enabled ? 'Finish masking' : 'Add a mask'; $('drawHint').hidden = !enabled; if (enabled) state.view = 'protected'; }
 function point(event) { const r = canvas.getBoundingClientRect(); return [Math.max(0, Math.min(base.width, (event.clientX - r.left) * base.width / r.width)), Math.max(0, Math.min(base.height, (event.clientY - r.top) * base.height / r.height))]; }
 function maskAtPoint(position) {
-  if (state.drawing || state.view !== 'protected') return null;
+  if (state.drawing || state.adjusting || state.view !== 'protected') return null;
   return maskTargetAtPoint(position, state.fields, state.manual, textLines);
 }
 function showMaskTarget(target) {
@@ -515,10 +589,45 @@ canvas.addEventListener('pointerup', event => {
   state.drag = null; render();
 });
 canvas.addEventListener('pointercancel', () => { state.drag = null; renderCanvas(); });
-document.addEventListener('keydown', event => { if (event.key === 'Escape' && state.drawing) { setDrawing(false); render(); } });
+let adjustmentDrag = null;
+adjustLayer.addEventListener('click', event => event.stopPropagation());
+for (const handle of adjustLayer.querySelectorAll('button')) {
+  handle.addEventListener('pointerdown', event => {
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
+    const mask = adjustedMask(); if (!mask) return;
+    event.preventDefault(); event.stopPropagation();
+    handle.setPointerCapture(event.pointerId);
+    adjustmentDrag = { id: mask.id, handle: handle.dataset.handle, rect: [...mask.rect], start: point(event) };
+  });
+  handle.addEventListener('pointermove', event => {
+    if (!adjustmentDrag || adjustmentDrag.id !== adjustedMask()?.id) return;
+    const mask = adjustedMask(), current = point(event);
+    if (state.adjusting.type === 'field' && !mask.matchingRect) mask.matchingRect = [...adjustmentDrag.rect];
+    mask.rect = adjustMaskRect(adjustmentDrag.rect, adjustmentDrag.handle, current[0] - adjustmentDrag.start[0], current[1] - adjustmentDrag.start[1], base.width, base.height);
+    if (state.adjusting.type === 'field') mask.geometryOverride = true;
+    renderCanvas();
+  });
+  for (const type of ['pointerup', 'pointercancel']) handle.addEventListener(type, () => {
+    if (!adjustmentDrag) return;
+    adjustmentDrag = null; clearContextChange(); render();
+  });
+  handle.addEventListener('keydown', event => {
+    const directions = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+    if (!directions[event.key]) return;
+    const mask = adjustedMask(); if (!mask) return;
+    event.preventDefault();
+    const [dx, dy] = directions[event.key], step = event.shiftKey ? 10 : 1;
+    if (state.adjusting.type === 'field' && !mask.matchingRect) mask.matchingRect = [...mask.rect];
+    mask.rect = adjustMaskRect(mask.rect, handle.dataset.handle, dx * step, dy * step, base.width, base.height);
+    if (state.adjusting.type === 'field') mask.geometryOverride = true;
+    clearContextChange(); renderCanvas();
+  });
+}
+document.addEventListener('keydown', event => { if (event.key === 'Escape' && (state.drawing || state.adjusting)) { setDrawing(false); state.adjusting = null; render(); } });
+$('finishAdjustButton').addEventListener('click', () => { state.adjusting = null; render(); });
 let panDrag = null;
 function setPanning(enabled) {
-  state.panning = enabled; panDrag = null;
+  state.panning = enabled; panDrag = null; if (enabled) state.adjusting = null;
   $('canvasStage').classList.toggle('panning', enabled);
   $('panButton').setAttribute('aria-pressed', String(enabled));
   if (enabled && state.drawing) setDrawing(false);
@@ -540,7 +649,7 @@ $('canvasStage').addEventListener('wheel', event => {
   event.preventDefault(); setZoom((state.zoom ?? currentFitScale()) * (event.deltaY < 0 ? 1.15 : 1 / 1.15));
 }, { passive: false });
 $('drawButton').addEventListener('click', () => { setDrawing(!state.drawing); render(); if (state.drawing) announce('Drag over a detail on the image to cover it. Press Escape to stop drawing.'); });
-$('undoButton').addEventListener('click', () => { state.manual.pop(); render(); });
+$('undoButton').addEventListener('click', () => { const removed = state.manual.pop(); if (state.adjusting?.type === 'manual' && state.adjusting.id === removed?.id) state.adjusting = null; render(); });
 $('resetButton').addEventListener('click', () => { clearContextChange(); cancelDetection(); state.manual = []; state.nextId = 1; resetFields(true); state.view = 'protected'; setDrawing(false); render(); setAIStatus('Recommendations reset. Review the whole image before sharing.'); announce(state.aiDetected ? 'AI recommendations reset for this audience; manual masks removed.' : state.source === 'sample' ? 'Sample recommendations reset for the selected audience.' : 'Manual masks removed. Run AI detection or add masks manually.'); });
 $('customAudience').addEventListener('change', event => { setContext(event.target.value, state.purpose); state.sharingProfile = 'custom'; render(); });
 for (const id of ['sharingPurpose', 'customSharingPurpose']) $(id).addEventListener('change', event => { const profile = state.sharingProfile || profileForContext(state.documentType, state.context, state.purpose); setContext(state.context, event.target.value); state.sharingProfile = profile; render(); });
@@ -723,9 +832,15 @@ function renderProfiles() {
   $('continueContext').disabled = state.detecting || !state.context || !state.purpose;
 }
 function renderFlow() {
+  const intro = state.flow === 'intro';
   const landing = state.flow === 'landing';
-  document.body.classList.toggle('editing', !landing);
-  $('landingPage').hidden = !landing; $('workspacePage').hidden = landing; $('resumeButton').hidden = !state.hasImage;
+  document.body.classList.toggle('editing', !intro && !landing);
+  document.body.classList.toggle('welcoming', intro);
+  $('introPage').hidden = !intro; $('skipIntro').hidden = !intro;
+  $('landingPage').hidden = !landing; $('workspacePage').hidden = intro || landing;
+  $('resumeButton').hidden = !state.hasImage; $('introResume').hidden = !state.hasImage;
+  introDemo.setActive(intro);
+  if (window.location.hash !== routeForFlow()) history.pushState(null, '', routeForFlow());
   $('analysisBanner').hidden = !state.detecting;
   const selected = state.sharingProfile || profileForContext(state.documentType, state.context, state.purpose);
   const profile = sharingProfiles(state.documentType).find(profile => profile.id === selected);
@@ -742,7 +857,7 @@ function openContextDialog() {
   state.flow = 'context'; render();
   if (!$('contextDialog').open) $('contextDialog').showModal();
 }
-function closeWorkDialogs() { for (const id of ['contextDialog', 'moreDialog', 'aiDialog']) if ($(id).open) $(id).close(); }
+function closeWorkDialogs() { for (const id of ['contextDialog', 'moreDialog', 'aiDialog', 'exportDialog', 'aboutDialog']) if ($(id).open) $(id).close(); }
 function startImageFlow() {
   closeWorkDialogs(); state.hasImage = true; state.flow = 'scanning'; state.fitMode = 'auto'; state.zoom = null; setPanning(false); state.sharingProfile = ''; state.reviewExpanded = false; state.expandedField = null;
   $('fineTuneContext').open = false; $('typeSettings').open = false;
@@ -776,10 +891,14 @@ $('applyAIType').addEventListener('click', () => { const type = state.aiTypeSugg
 $('dismissAIType').addEventListener('click', () => { state.aiTypeSuggestion = null; render(); });
 $('applySuggestedReveals').addEventListener('click', () => { clearContextChange(); state.fields.forEach(field => { if (field.pendingReveal) { field.pendingReveal = false; field.userOverride = 'keep'; } }); resetFields(); state.view = 'protected'; render(); announce('Reviewed suggested details are now visible. Check the image before sharing.'); });
 $('newImageButton').addEventListener('click', () => $('fileInput').click());
-$('mobileDrawButton').addEventListener('click', () => $('drawButton').click());
+$('mobileDrawButton').addEventListener('click', () => { if (state.adjusting) { state.adjusting = null; render(); } else $('drawButton').click(); });
 $('reviewToggle').addEventListener('click', () => { state.reviewExpanded = !state.reviewExpanded; renderFlow(); });
-$('homeButton').addEventListener('click', () => { cancelDetection(); closeWorkDialogs(); state.flow = 'landing'; render(); window.scrollTo({ top: 0, behavior: 'auto' }); });
-$('resumeButton').addEventListener('click', () => { state.flow = 'review'; render(); });
+$('homeButton').addEventListener('click', () => navigateEntry('landing'));
+$('resumeButton').addEventListener('click', () => navigateEntry('review'));
+$('introResume').addEventListener('click', () => navigateEntry('review'));
+$('introStart').addEventListener('click', () => navigateEntry('landing'));
+$('skipIntro').addEventListener('click', () => navigateEntry('landing'));
+$('showIntro').addEventListener('click', () => navigateEntry('intro'));
 document.querySelectorAll('[data-start-sample]').forEach(button => button.addEventListener('click', () => loadExample(button.dataset.startSample)));
 $('uploadZone').addEventListener('dragover', event => { event.preventDefault(); $('uploadZone').classList.add('dragging'); });
 $('uploadZone').addEventListener('dragleave', () => $('uploadZone').classList.remove('dragging'));

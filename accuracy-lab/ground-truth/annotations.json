@@ -1,0 +1,84 @@
+{
+  "protocol": "Manual visual transcription and rectangles on original PNGs; coordinates are [left, top, right, bottom], right/bottom exclusive. Address fields have one rectangle per visible line. Public controls measure specific unwanted redactions. Machine-readable codes and faces are excluded from text metrics.",
+  "images": [
+    {"id":"SF","width":558,"height":746,"fields":[
+      {"category":"tracking","parts":[[190,123,405,145,"SF0987654321098"]]},
+      {"category":"tracking","parts":[[190,219,366,238,"SF0987654321098"]]},
+      {"category":"tracking","parts":[[190,706,366,725,"SF0987654321098"]]},
+      {"category":"order","parts":[[190,608,365,626,"EB202610250987"]]},
+      {"category":"name","parts":[[131,250,303,270,"Marcus J. Bennett"]]},
+      {"category":"phone","parts":[[170,275,322,293,"+1 415 555 0137"]]},
+      {"category":"address","parts":[[131,299,339,319,"742 Pine Street, Apt 4B"],[131,322,354,342,"San Francisco, CA 94108"],[131,345,256,364,"United States"]]},
+      {"category":"name","parts":[[131,384,308,405,"Ellan H. Gutierrez"]]},
+      {"category":"phone","parts":[[170,409,315,429,"+852 6123 7941"]]},
+      {"category":"address","parts":[[131,432,412,451,"Room 820, Run Run Shaw Building"],[131,456,371,475,"The University of Hong Kong"],[131,479,413,498,"Pokfulam Road, Hong Kong SAR"]]}
+    ],"public":[[40,525,429,547,"description"],[40,550,209,572,"quantity"]]},
+    {"id":"Amazon","width":526,"height":732,"fields":[
+      {"category":"order","parts":[[106,139,346,160,"113-4829571-6203857"]]},
+      {"category":"name","parts":[[18,262,115,282,"Priya Nair"]]},
+      {"category":"address","parts":[[18,286,268,304,"Flat 12A, Harbour View Tower"],[18,308,185,326,"1 Austin Road West"],[18,330,216,348,"Tsim Sha Tsui, Kowloon"],[18,353,155,371,"Hong Kong SAR"]]},
+      {"category":"phone","parts":[[81,377,222,396,"+852 9345 6721"]]},
+      {"category":"payment","parts":[[456,274,501,293,"4242"]]}
+    ],"public":[[18,417,200,435,"order summary"],[392,457,501,475,"item price"]]},
+    {"id":"DHL","width":538,"height":742,"fields":[
+      {"category":"name","parts":[[112,119,212,137,"Olivia Chen"]]},
+      {"category":"address","parts":[[112,141,246,159,"Global Tech Ltd."],[112,163,240,181,"10 Anson Road"],[112,185,333,203,"#18-07 International Plaza"],[112,206,273,224,"Singapore 079903"]]},
+      {"category":"phone","parts":[[147,226,278,243,"+65 8123 4567"]]},
+      {"category":"name","parts":[[112,264,245,282,"Daniel Foster"]]},
+      {"category":"address","parts":[[112,289,385,307,"Room 305, Jockey Club Tower"],[112,312,375,330,"The University of Hong Kong"],[112,335,249,353,"Pokfulam Road"],[112,358,256,376,"Hong Kong SAR"]]},
+      {"category":"phone","parts":[[149,381,299,400,"+852 9876 3412"]]},
+      {"category":"reference","parts":[[179,426,340,445,"GD20261025001"]]},
+      {"category":"tracking","parts":[[255,554,402,577,"6098457321"]]}
+    ],"public":[[30,671,279,689,"contents"],[31,699,316,716,"service"]]},
+    {"id":"FedEx","width":536,"height":724,"fields":[
+      {"category":"name","parts":[[108,123,238,142,"Sofia Ramirez"]]},
+      {"category":"address","parts":[[108,144,296,163,"Ramirez Trading Co."],[108,166,255,185,"2214 Elm Street"],[108,188,316,207,"Los Angeles, CA 90067"],[108,210,236,229,"United States"]]},
+      {"category":"phone","parts":[[149,232,306,251,"+1 310 555 7823"]]},
+      {"category":"email","parts":[[169,253,433,273,"sofia.ramirez@example.com"]]},
+      {"category":"name","parts":[[108,282,240,301,"Ethan Brooks"]]},
+      {"category":"address","parts":[[108,306,419,325,"Room 1011, Lee Shau Kee Building"],[108,329,366,348,"The University of Hong Kong"],[108,351,248,370,"Pokfulam Road"],[108,374,256,393,"Hong Kong SAR"]]},
+      {"category":"phone","parts":[[153,398,318,417,"+852 6543 2198"]]},
+      {"category":"email","parts":[[170,420,433,441,"ethan.brooks@example.com"]]},
+      {"category":"tracking","parts":[[91,546,281,568,"7750 9348 2211"]]},
+      {"category":"reference","parts":[[143,677,269,695,"PO-2026-1045"]]}
+    ],"public":[[332,546,511,570,"service"],[166,600,346,620,"description"]]},
+    {"id":"UPS","width":564,"height":742,"fields":[
+      {"category":"tracking","parts":[[299,28,535,47,"1Z 123 456 78 9012 345 6"]]},
+      {"category":"tracking","parts":[[168,559,381,578,"1Z1234567890123456"]]},
+      {"category":"name","parts":[[180,119,326,138,"Liam O'Connor"]]},
+      {"category":"address","parts":[[180,142,360,161,"Maple Leaf Supplies"],[180,165,355,183,"789 Industrial Road"],[180,188,384,206,"Toronto, ON M5V 3A8"],[180,211,250,229,"Canada"]]},
+      {"category":"phone","parts":[[249,232,403,251,"+1 416 555 0199"]]},
+      {"category":"name","parts":[[180,265,314,285,"Amelia Wong"]]},
+      {"category":"address","parts":[[180,289,456,308,"Room 506, Centennial Campus"],[180,312,424,330,"The University of Hong Kong"],[180,333,320,350,"Pokfulam Road"],[180,350,324,367,"Hong Kong SAR"]]},
+      {"category":"phone","parts":[[249,367,404,384,"+852 5123 9087"]]},
+      {"category":"reference","parts":[[141,693,293,713,"INV-2026-77891"]]}
+    ],"public":[[165,449,377,475,"service"],[140,621,352,642,"description"]]},
+    {"id":"eBay","width":546,"height":734,"fields":[
+      {"category":"order","parts":[[177,141,341,160,"26-99874-12345"]]},
+      {"category":"name","parts":[[33,231,161,249,"Lucas Martin"]]},
+      {"category":"address","parts":[[33,254,259,272,"2/F, Block A, City Garden"],[33,277,197,295,"233 Electric Road"],[33,300,290,318,"North Point, Hong Kong SAR"],[33,323,134,341,"Hong Kong"]]},
+      {"category":"phone","parts":[[33,345,185,364,"+852 6390 1122"]]},
+      {"category":"payment","parts":[[239,672,281,690,"5678"]]}
+    ],"public":[[32,375,70,392,"item label"],[397,489,510,509,"price"]]},
+    {"id":"SHEIN","width":536,"height":754,"fields":[
+      {"category":"order","parts":[[173,123,356,143,"GS2610257890123"]]},
+      {"category":"name","parts":[[33,288,161,306,"Isabella Rossi"]]},
+      {"category":"address","parts":[[33,307,283,325,"Room 703, Kadoorie Building"],[33,326,282,344,"The University of Hong Kong"],[33,344,319,362,"Pokfulam Road, Hong Kong SAR"]]},
+      {"category":"phone","parts":[[33,359,194,378,"+852 5587 3344"]]}
+    ],"public":[[30,150,311,167,"order date"],[127,394,354,412,"product"]]},
+    {"id":"PayPal","width":564,"height":790,"fields":[
+      {"category":"transaction","parts":[[261,167,457,186,"7H32145678901234C"]]},
+      {"category":"payment","parts":[[166,280,218,298,"9012"]]},
+      {"category":"name","parts":[[45,343,137,362,"Noah Kim"]]},
+      {"category":"address","parts":[[45,365,369,383,"Room 408, Run Run Shaw Building"],[45,386,323,404,"The University of Hong Kong"],[45,408,188,426,"Pokfulam Road"],[45,428,197,446,"Hong Kong SAR"]]},
+      {"category":"phone","parts":[[45,449,205,467,"+852 6251 7788"]]},
+      {"category":"email","parts":[[45,470,279,489,"noah.kim@example.com"]]}
+    ],"public":[[45,570,280,589,"merchant email"],[45,591,210,610,"merchant phone"],[122,135,483,157,"merchant payment summary"]]},
+    {"id":"Chinese","width":1000,"height":340,"language":"eng+chi_tra","fields":[
+      {"category":"name","parts":[[166,27,267,59,"陳小明"]]},
+      {"category":"phone","parts":[[133,76,382,106,"+852 6123 4567"]]},
+      {"category":"address","parts":[[132,126,481,158,"香港薄扶林道 香港大學"]]},
+      {"category":"order","parts":[[166,176,417,207,"HK20261025001"]]}
+    ],"public":[[30,27,134,59,"recipient label"],[30,76,105,106,"phone label"]]}
+  ]
+}

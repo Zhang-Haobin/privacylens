@@ -1,0 +1,154 @@
+{
+  "id": "LongMixed",
+  "width": 760,
+  "height": 4000,
+  "language": "eng+chi_tra+chi_sim",
+  "fields": [
+    {
+      "category": "student_id",
+      "parts": [
+        [
+          162,
+          155,
+          293,
+          173,
+          "3030123456"
+        ]
+      ],
+      "conditions": [
+        "long image",
+        "24px",
+        "normal contrast"
+      ]
+    },
+    {
+      "category": "name",
+      "parts": [
+        [
+          83,
+          823,
+          193,
+          838,
+          "Example Person"
+        ]
+      ],
+      "conditions": [
+        "long image",
+        "15px",
+        "normal contrast"
+      ]
+    },
+    {
+      "category": "phone",
+      "parts": [
+        [
+          77,
+          1602,
+          168,
+          1612,
+          "+852 9123 4567"
+        ]
+      ],
+      "conditions": [
+        "long image",
+        "12px",
+        "low contrast"
+      ]
+    },
+    {
+      "category": "order",
+      "parts": [
+        [
+          91,
+          2401,
+          211,
+          2415,
+          "HK20261025002"
+        ]
+      ],
+      "conditions": [
+        "long image",
+        "16px",
+        "normal contrast"
+      ]
+    },
+    {
+      "category": "tracking",
+      "parts": [
+        [
+          107,
+          3202,
+          214,
+          3212,
+          "SF0987654321098"
+        ]
+      ],
+      "conditions": [
+        "long image",
+        "12px",
+        "normal contrast"
+      ]
+    },
+    {
+      "category": "address",
+      "parts": [
+        [
+          82,
+          3852,
+          167,
+          3863,
+          "12 Example Lane"
+        ]
+      ],
+      "conditions": [
+        "long image",
+        "11px",
+        "low contrast"
+      ]
+    }
+  ],
+  "public": [
+    [
+      35,
+      154,
+      162,
+      172,
+      "label"
+    ],
+    [
+      35,
+      823,
+      83,
+      834,
+      "label"
+    ],
+    [
+      35,
+      1602,
+      77,
+      1611,
+      "label"
+    ],
+    [
+      35,
+      2400,
+      91,
+      2416,
+      "label"
+    ],
+    [
+      35,
+      3202,
+      107,
+      3213,
+      "label"
+    ],
+    [
+      34,
+      3852,
+      82,
+      3860,
+      "label"
+    ]
+  ]
+}

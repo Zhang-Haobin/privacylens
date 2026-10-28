@@ -7,6 +7,7 @@
   <meta name="description" content="PrivacyLens: a CCST9003 prototype for making thoughtful privacy choices before sharing screenshots.">
   <title>PrivacyLens — Share with intention</title>
   <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="intro.css">
 </head>
 <body>
   <svg class="icon-library" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><defs>
@@ -29,18 +30,56 @@
   </defs></svg>
   <header class="topbar">
     <button class="brand brand-home" id="homeButton" aria-label="PrivacyLens home"><span class="brand-mark"><svg><use href="#i-shield"/></svg></span>Privacy<span>Lens</span></button>
-    <button class="text-button" id="aboutButton">Privacy &amp; how it works <svg><use href="#i-info"/></svg></button>
+    <div class="entry-nav"><button class="text-button" id="skipIntro" hidden>Skip intro <svg><use href="#i-arrow"/></svg></button><button class="text-button" id="aboutButton">Privacy &amp; how it works <svg><use href="#i-info"/></svg></button></div>
   </header>
   <input type="file" id="fileInput" accept="image/png,image/jpeg,image/webp" hidden>
   <main>
-    <section id="landingPage" class="landing-page">
+    <section id="introPage" class="welcome-page" aria-labelledby="introHeading" hidden>
+      <div class="welcome-hero">
+        <div class="welcome-copy">
+          <p class="welcome-eyebrow"><span></span> SHARE WITH INTENTION</p>
+          <h1 id="introHeading" tabindex="-1">Share the story.<br>Keep personal<br>details <em>private.</em></h1>
+          <p class="welcome-description">A little context changes what you share.<br>Protect the personal details. Keep what matters.</p>
+          <div class="welcome-actions"><button id="introStart" class="welcome-primary">Get started <svg><use href="#i-arrow"/></svg></button><button id="introResume" class="welcome-resume" hidden>Return to your current image <span aria-hidden="true">↗</span></button></div>
+          <p class="welcome-local"><svg><use href="#i-lock"/></svg> On-device editing &amp; OCR. AI only if you choose.</p>
+        </div>
+        <div class="welcome-demo" id="introDemo">
+          <div class="demo-caption"><span class="demo-caption-dot"></span> FICTIONAL EXAMPLE <span>PRESET DEMO · NO AI CALL</span></div>
+          <div class="demo-receipt" aria-label="Fictional delivery screenshot">
+            <div class="demo-window" aria-hidden="true"><span></span><span></span><span></span><small>parcel. / order details</small><svg><use href="#i-lock"/></svg></div>
+            <div class="demo-receipt-content">
+              <div class="demo-store"><strong>parcel.</strong><span>YOUR EVERYDAY STORE</span></div>
+              <div class="demo-order-row"><span>Order details</span><span class="demo-sensitive" data-demo-field="order"><span>#PL-2048-7612</span><span class="demo-cover" aria-hidden="true"></span></span></div>
+              <div class="demo-delivery"><span class="demo-delivery-tag">DELIVERY UPDATE</span><h2>Delayed in transit</h2><p>A little late. Still on its way.</p><div class="demo-track" aria-hidden="true"><i></i><i></i><i></i></div><div class="demo-track-labels"><span>Ordered</span><span>In transit</span><span>Delivered</span></div></div>
+              <div class="demo-product"><span class="demo-product-icon"><svg><use href="#i-shield"/></svg></span><div><strong>Everyday essentials</strong><small>Sage green / Qty 1</small></div><span>HK$ 299</span></div>
+              <div class="demo-details"><div><small>RECIPIENT</small><span class="demo-sensitive" data-demo-field="name"><span>Alex Chan</span><span class="demo-cover" aria-hidden="true"></span></span></div><div><small>PHONE</small><span class="demo-sensitive" data-demo-field="phone"><span>+852 5550 0136</span><span class="demo-cover" aria-hidden="true"></span></span></div><div class="demo-address"><small>DELIVERY ADDRESS</small><span class="demo-sensitive" data-demo-field="address"><span>12 Example Lane, Demo District</span><span class="demo-cover" aria-hidden="true"></span></span></div></div>
+              <div class="demo-receipt-bottom"><span>Fictional details, for demonstration only.</span><svg><use href="#i-shield"/></svg></div>
+            </div>
+            <div class="demo-scan" aria-hidden="true"></div>
+          </div>
+          <div class="demo-context">
+            <p id="demoChoiceLabel">SAME IMAGE. DIFFERENT REASONS TO SHARE.</p>
+            <div class="demo-choices" role="group" aria-labelledby="demoChoiceLabel">
+              <button data-demo-context="public" aria-pressed="true"><strong>Public</strong><span>Share an update</span></button>
+              <button data-demo-context="friends" aria-pressed="false"><strong>Friends</strong><span>Ask for advice</span></button>
+              <button data-demo-context="support" aria-pressed="false"><strong>Official support</strong><span>Find an order</span></button>
+            </div>
+            <p id="demoExplanation" class="demo-explanation" role="status" aria-live="polite" aria-atomic="true"></p>
+          </div>
+        </div>
+      </div>
+      <div class="welcome-principle"><p>Privacy isn’t about hiding everything.<br><em>It’s about choosing what to share.</em></p><ol><li><span>01</span> Choose a screenshot</li><li><span>02</span> Tell us who it’s for</li><li><span>03</span> Review, then share</li></ol></div>
+      <footer class="welcome-footer"><span>PrivacyLens / CCST9003 prototype</span><span>Thoughtful sharing, on your terms.</span></footer>
+    </section>
+    <section id="landingPage" class="landing-page" hidden>
       <div class="eyebrow"><span></span> A LITTLE CONTEXT. A LOT MORE PRIVACY.</div>
-      <h1>Share the story.<br>Keep the personal details.</h1>
+      <h1 id="uploadHeading" tabindex="-1">Your image.<br>Your privacy.</h1>
       <p class="landing-copy">AI-assisted privacy protection, tailored to who you’re sharing with.<br>Upload a screenshot. Choose your audience. Review what stays visible.</p>
       <div class="upload-zone" id="uploadZone"><span class="upload-mark"><svg><use href="#i-upload"/></svg></span><h2>Start with a screenshot.</h2><p>Drop an image here, or choose one from your device.</p><button id="uploadButton" class="primary-button">Choose a screenshot <svg><use href="#i-arrow"/></svg></button><small>PNG, JPG or WebP · up to 20 MB</small></div>
       <p class="landing-privacy"><svg><use href="#i-lock"/></svg> Images are read and edited on your device. AI is an optional extra.</p>
       <div class="sample-start"><span>Or try a fictional example</span><div class="sample-choices"><button data-start-sample="delivery"><span class="sample-choice-label"><span class="sample-emoji" aria-hidden="true">📦</span>Delivery / order</span><svg><use href="#i-arrow"/></svg></button><button data-start-sample="transcript"><span class="sample-choice-label"><span class="sample-emoji" aria-hidden="true">🎓</span>Academic transcript</span><svg><use href="#i-arrow"/></svg></button><button data-start-sample="chat"><span class="sample-choice-label"><span class="sample-emoji" aria-hidden="true">💬</span>Chat conversation</span><svg><use href="#i-arrow"/></svg></button></div></div>
       <button id="resumeButton" class="inline-action" hidden>Return to your current image</button>
+      <div class="intro-return"><button id="showIntro" class="inline-action">View the introduction</button></div>
       <div class="landing-steps"><span><b>1</b> Choose an image</span><span><b>2</b> Choose who it’s for</span><span><b>3</b> Review &amp; download</span></div>
       <footer><span>PrivacyLens / CCST9003 prototype</span><span>Thoughtful sharing, on your terms.</span></footer>
     </section>
@@ -49,7 +88,7 @@
       <div class="analysis-banner" id="analysisBanner" hidden><span class="activity-dot"></span><p id="scanProgress" role="status">Reading your image on this device…</p><button id="cancelScan" class="inline-action">Cancel</button></div>
       <section id="editorWorkspace" class="workspace" aria-label="Screenshot editor">
         <section class="preview-panel" aria-labelledby="previewHeading">
-          <div class="preview-header"><div><h2 id="previewHeading" tabindex="-1">Your sharing preview</h2><span id="fileLabel"></span></div><div class="preview-actions"><button id="drawButton" class="tool-button" aria-pressed="false"><svg><use href="#i-crop"/></svg> Add a mask</button><button id="undoButton" class="tool-button" disabled>Undo last mask</button></div><button class="tool-button mobile-mask" id="mobileDrawButton" aria-pressed="false">Add a mask</button></div>
+          <div class="preview-header"><div><h2 id="previewHeading" tabindex="-1">Your sharing preview</h2><span id="fileLabel"></span></div><div class="preview-actions"><button id="drawButton" class="tool-button" aria-pressed="false"><svg><use href="#i-crop"/></svg> Add a mask</button><button id="finishAdjustButton" class="tool-button" hidden>Finish adjusting</button><button id="undoButton" class="tool-button" disabled>Undo last mask</button></div><button class="tool-button mobile-mask" id="mobileDrawButton" aria-pressed="false">Add a mask</button></div>
           <div class="canvas-stage" id="canvasStage"><div class="canvas-wrap" id="canvasWrap"><canvas id="previewCanvas" width="760" height="1030" role="img" aria-label="Your screenshot"></canvas><div id="drawHint" class="draw-hint" hidden>Drag to cover a detail</div></div></div>
           <div class="preview-toolbar"><div class="view-switch" role="group" aria-label="Preview mode"><button id="originalView" aria-pressed="false">Original</button><button id="protectedView" class="active" aria-pressed="true">Protected</button></div><div class="zoom-toolbar" role="group" aria-label="Image zoom"><button id="fitButton" class="tool-button" aria-pressed="true">Fit</button><button id="widthButton" class="tool-button" aria-pressed="false" title="Fit the image width so you can scroll through details">Inspect</button><button id="panButton" class="tool-button" aria-pressed="false" title="Drag to move around the image">Pan</button><button id="zoomOutButton" class="tool-button" aria-label="Zoom out">−</button><output id="zoomLevel" aria-live="polite">Fit</output><button id="zoomInButton" class="tool-button" aria-label="Zoom in">+</button><button id="zoomButton" class="tool-button" aria-pressed="false">100%</button></div><span id="canvasHint" hidden></span></div>
           <div class="preview-footnote"><span class="green-dot"></span><span id="previewNote">Review the whole image before sharing.</span></div>

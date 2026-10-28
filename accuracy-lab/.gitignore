@@ -1,0 +1,6 @@
+/fixtures/
+/results/
+/ground-truth/originals/
+/ground-truth/visuals/
+/ground-truth/runs/
+/ground-truth/__pycache__/

@@ -125,6 +125,17 @@ canvas.mask-target { cursor: pointer; }
 .preview-mask { position: absolute; background: #202b24; }
 .text-line-highlight { position: absolute; pointer-events: none; outline: 2px solid #50856b; outline-offset: 2px; background: #6caa851a; z-index: 1; }
 .text-line-highlight[hidden] { display: none; }
+.mask-adjust { position: absolute; z-index: 3; border: 2px solid #d9b646; box-shadow: 0 0 0 2px #273b32; pointer-events: none; }
+.mask-adjust button { position: absolute; pointer-events: auto; touch-action: none; border: 2px solid #273b32; background: #fff8dd; color: #273b32; border-radius: 5px; min-width: 23px; min-height: 23px; padding: 0; line-height: 1; }
+.mask-adjust button:focus-visible { outline: 3px solid #d9b646; outline-offset: 3px; }
+.mask-adjust .mask-handle-nw { top: 0; left: 0; transform: translate(-50%, -50%); cursor: nwse-resize; }
+.mask-adjust .mask-handle-ne { top: 0; right: 0; transform: translate(50%, -50%); cursor: nesw-resize; }
+.mask-adjust .mask-handle-sw { bottom: 0; left: 0; transform: translate(-50%, 50%); cursor: nesw-resize; }
+.mask-adjust .mask-handle-se { bottom: 0; right: 0; transform: translate(50%, 50%); cursor: nwse-resize; }
+.mask-adjust .mask-handle-move { top: 50%; left: 50%; transform: translate(-50%, -50%); width: 34px; height: 26px; font-size: 12px; cursor: move; }
+.mask-adjust-hint { font-size: 11px; line-height: 1.5; color: #765e22; padding: 8px 10px; background: #fff8dd; border-radius: 6px; margin-top: 6px; }
+.field-adjust { border: 0; background: transparent; color: var(--green); font-size: 11px; padding: 5px 2px; min-height: 32px; white-space: nowrap; cursor: pointer; }
+.field-adjust:hover { text-decoration: underline; }
 .ocr-lines-panel { margin-top: 18px; border: 1px solid var(--line); border-radius: 9px; padding: 12px; }
 .ocr-lines-panel[hidden] { display: none; }
 .ocr-lines-panel summary { cursor: pointer; color: var(--green); font-size: 12px; font-weight: 600; }

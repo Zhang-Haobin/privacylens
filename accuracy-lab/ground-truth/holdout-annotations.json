@@ -1,0 +1,305 @@
+{
+  "protocol": "Generated holdout layouts, labels from independent font measurements; created before contextual rule implementation.",
+  "images": [
+    {
+      "id": "HoldoutDelivery",
+      "width": 850,
+      "height": 500,
+      "fields": [
+        {
+          "category": "name",
+          "parts": [
+            [
+              35,
+              129,
+              163,
+              150,
+              "Maya Brooks"
+            ]
+          ]
+        },
+        {
+          "category": "address",
+          "parts": [
+            [
+              35,
+              161,
+              218,
+              178,
+              "21 Garden Avenue"
+            ],
+            [
+              34,
+              193,
+              103,
+              214,
+              "Apt 7C"
+            ],
+            [
+              35,
+              225,
+              211,
+              242,
+              "Denver CO 80201"
+            ]
+          ]
+        }
+      ],
+      "public": [
+        [
+          35,
+          308,
+          226,
+          329,
+          "Green ceramic mug"
+        ]
+      ]
+    },
+    {
+      "id": "HoldoutColumns",
+      "width": 850,
+      "height": 500,
+      "fields": [
+        {
+          "category": "name",
+          "parts": [
+            [
+              35,
+              129,
+              126,
+              146,
+              "Nora Bell"
+            ]
+          ]
+        },
+        {
+          "category": "address",
+          "parts": [
+            [
+              35,
+              161,
+              198,
+              178,
+              "77 Sunset Street"
+            ],
+            [
+              35,
+              193,
+              222,
+              210,
+              "Portland OR 97201"
+            ]
+          ]
+        },
+        {
+          "category": "name",
+          "parts": [
+            [
+              455,
+              129,
+              564,
+              146,
+              "Evan Reed"
+            ]
+          ]
+        },
+        {
+          "category": "address",
+          "parts": [
+            [
+              455,
+              161,
+              584,
+              178,
+              "31 Oak Road"
+            ],
+            [
+              455,
+              193,
+              513,
+              210,
+              "Unit 4"
+            ],
+            [
+              455,
+              225,
+              632,
+              242,
+              "Seattle WA 98101"
+            ]
+          ]
+        }
+      ],
+      "public": [
+        [
+          35,
+          321,
+          143,
+          338,
+          "USD 27.50"
+        ]
+      ]
+    },
+    {
+      "id": "HoldoutSender",
+      "width": 850,
+      "height": 500,
+      "fields": [
+        {
+          "category": "name",
+          "parts": [
+            [
+              140,
+              84,
+              272,
+              101,
+              "Grace Wilson"
+            ]
+          ]
+        },
+        {
+          "category": "address",
+          "parts": [
+            [
+              140,
+              116,
+              280,
+              133,
+              "24 River Road"
+            ],
+            [
+              139,
+              148,
+              302,
+              165,
+              "Austin TX 78701"
+            ]
+          ]
+        },
+        {
+          "category": "name",
+          "parts": [
+            [
+              140,
+              214,
+              249,
+              231,
+              "Jordan Lee"
+            ]
+          ]
+        },
+        {
+          "category": "address",
+          "parts": [
+            [
+              140,
+              246,
+              282,
+              263,
+              "93 Lake Street"
+            ],
+            [
+              140,
+              278,
+              302,
+              295,
+              "Dallas TX 75201"
+            ]
+          ]
+        }
+      ],
+      "public": [
+        [
+          190,
+          339,
+          309,
+          360,
+          "Board game"
+        ]
+      ]
+    },
+    {
+      "id": "HoldoutNegative",
+      "width": 850,
+      "height": 500,
+      "fields": [],
+      "public": [
+        [
+          35,
+          94,
+          213,
+          115,
+          "To: Morgan Taylor"
+        ],
+        [
+          35,
+          134,
+          331,
+          155,
+          "Room 123 - Design discussion"
+        ],
+        [
+          34,
+          174,
+          268,
+          195,
+          "Agenda: Product launch"
+        ],
+        [
+          35,
+          214,
+          206,
+          235,
+          "Budget: USD 250"
+        ]
+      ]
+    },
+    {
+      "id": "HoldoutChinese",
+      "width": 850,
+      "height": 500,
+      "fields": [
+        {
+          "category": "name",
+          "parts": [
+            [
+              35,
+              125,
+              102,
+              148,
+              "李小明"
+            ]
+          ]
+        },
+        {
+          "category": "address",
+          "parts": [
+            [
+              35,
+              157,
+              234,
+              180,
+              "香港九龍旺角彌敦道"
+            ],
+            [
+              35,
+              193,
+              215,
+              214,
+              "12 Example Street"
+            ]
+          ]
+        }
+      ],
+      "public": [
+        [
+          35,
+          286,
+          139,
+          307,
+          "Desk lamp"
+        ]
+      ]
+    }
+  ]
+}
