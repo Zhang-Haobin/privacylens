@@ -1,3 +1,5 @@
+import { AI_BUDGET } from './ai-policy.js';
+import { readAPI } from './api-client.js';
 import { recognizeLocal } from './ocr.js';
 import { createMaskAnimator } from './mask-motion.js';
 import { maskTargetAtPoint, textLineTargets } from './mask-targets.js';
@@ -692,13 +694,6 @@ function setAIStatus(message, error = false) {
   $('scanProgress').textContent = progress;
   $('aiDialogStatus').textContent = message; $('aiDialogStatus').dataset.error = String(error);
 }
-async function readAPI(response) {
-  let result;
-  try { result = await response.json(); }
-  catch { throw new Error('AI backend is unavailable. Start with npm run dev, or deploy the API functions to Vercel.'); }
-  if (!response.ok) throw new Error(result.error || 'The AI request failed. Try again later.');
-  return result;
-}
 $('aiConsent').addEventListener('change', render);
 $('zoomButton').addEventListener('click', () => setZoom(1));
 $('fitButton').addEventListener('click', () => setZoom(null, 'fit'));
@@ -747,7 +742,7 @@ $('detectButton').addEventListener('click', async () => {
   const currentId = ++detectionId; const loadId = state.loadId;
   const document = state.ocrDocument;
   const controller = new AbortController(); detectionController = controller;
-  const timeout = setTimeout(() => controller.abort(), 100_000);
+  const timeout = setTimeout(() => controller.abort(), AI_BUDGET.browserMs);
   state.detecting = true; state.phase = 'ai'; state.aiStatus = 'processing'; setDrawing(false); render(); setAIStatus('Screening likely credentials locally, then sending the screened text and layout to the configured AI provider. Other personal text may remain. The image stays on this device…');
   try {
     const payload = textPayload(document);
@@ -886,7 +881,14 @@ $('contextButton').addEventListener('click', openContextDialog);
 $('typeButton').addEventListener('click', () => { $('typeSettings').open = true; openContextDialog(); });
 $('editTypeButton').addEventListener('click', () => { $('typeSettings').open = !$('typeSettings').open; });
 $('moreButton').addEventListener('click', () => $('moreDialog').showModal());
-$('aiButton').addEventListener('click', () => { $('aiDialogStatus').textContent = ''; $('aiConsent').checked = false; render(); $('aiDialog').showModal(); });
+$('aiButton').addEventListener('click', () => {
+  $('aiDialogStatus').textContent = ''; $('aiConsent').checked = false;
+  // textContent prevents OCR instructions/markup from becoming executable UI.
+  $('aiSendPreview').textContent = state.ocrDocument?.words.length
+    ? textPayload(state.ocrDocument).lines.map(line => line.words.map(word => word.text).join(' ')).join('\n')
+    : 'Read text locally first.';
+  render(); $('aiDialog').showModal();
+});
 $('applyAIType').addEventListener('click', () => { const type = state.aiTypeSuggestion; if (!type || state.typeSource === 'manual' || state.documentType !== 'general') return; state.aiTypeSuggestion = null; setContext(state.context, state.purpose, type, true); openContextDialog(); });
 $('dismissAIType').addEventListener('click', () => { state.aiTypeSuggestion = null; render(); });
 $('applySuggestedReveals').addEventListener('click', () => { clearContextChange(); state.fields.forEach(field => { if (field.pendingReveal) { field.pendingReveal = false; field.userOverride = 'keep'; } }); resetFields(); state.view = 'protected'; render(); announce('Reviewed suggested details are now visible. Check the image before sharing.'); });

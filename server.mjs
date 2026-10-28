@@ -6,6 +6,8 @@ import { readdir } from 'node:fs/promises';
 const files = new Map([
   ['/', ['index.html', 'text/html; charset=utf-8']],
   ['/index.html', ['index.html', 'text/html; charset=utf-8']],
+  ['/ai-policy.js', ['ai-policy.js', 'text/javascript; charset=utf-8']],
+  ['/api-client.js', ['api-client.js', 'text/javascript; charset=utf-8']],
   ['/app.js', ['app.js', 'text/javascript; charset=utf-8']],
   ['/intro.js', ['intro.js', 'text/javascript; charset=utf-8']],
   ['/intro.css', ['intro.css', 'text/css; charset=utf-8']],

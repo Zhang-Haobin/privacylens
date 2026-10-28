@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { handleAI } from '../lib/ai.js';
 
-const env = { OPENAI_API_KEY: 'test-key-never-in-response', OPENAI_BASE_URL: 'https://ai.novacode.top/v1/' };
+const env = { PRIVACYLENS_ENABLE_LEGACY_IMAGE_AI: 'true', OPENAI_API_KEY: 'test-key-never-in-response', OPENAI_BASE_URL: 'https://ai.novacode.top/v1/' };
 // A minimal JPEG envelope is enough here; provider image decoding is outside these HTTP-contract tests.
 const image = `data:image/jpeg;base64,${Buffer.from([255, 216, 255, 224, 0, 255, 217]).toString('base64')}`;
 const payload = { image, width: 1200, height: 800, consent: true };
@@ -20,7 +20,7 @@ function completion(fields = [field], finish_reason = 'stop') {
 const noFetch = async () => { assert.fail('Invalid requests must not reach the provider'); };
 
 test('missing key fails with an actionable message before contacting provider', async () => {
-  const response = await handleAI(request(), { env: {}, fetchImpl: noFetch });
+  const response = await handleAI(request(), { env: { PRIVACYLENS_ENABLE_LEGACY_IMAGE_AI: 'true' }, fetchImpl: noFetch });
   assert.equal(response.status, 503);
   assert.match((await response.json()).error, /OPENAI_API_KEY/);
   assert.equal(response.headers.get('cache-control'), 'no-store');

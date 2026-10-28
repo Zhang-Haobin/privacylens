@@ -1,0 +1,17 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>PrivacyLens local security audit</title>
+<style>body{font:16px system-ui;max-width:900px;margin:40px auto;padding:20px;background:#f5f5ef;color:#202b24}button{padding:12px}pre{white-space:pre-wrap}</style>
+<h1>Local security audit · synthetic data only</h1><p>Uses the production browser serializer and a local mock provider. No external AI requests.</p>
+<button id="run">Run outgoing request checks</button><pre id="results" role="status">Ready</pre>
+<script type="module">
+import {textPayload} from '/ocr-core.js';
+import {credentialAuditCases,auditDocument} from '/qa-audit-fixtures.js';
+document.querySelector('#run').onclick=async()=>{
+ document.querySelector('#run').disabled=true;const reports=[];
+ for(const fixture of credentialAuditCases.filter(f=>!f.limitation)){
+  const response=await fetch('/api/ai?action=classify-text',{method:'POST',headers:{'Content-Type':'application/json','X-QA-Case':fixture.id},body:JSON.stringify(textPayload(auditDocument(fixture.rows)))});
+  reports.push({id:fixture.id,passed:response.ok});
+  document.querySelector('#results').textContent=JSON.stringify(reports,null,2);
+ }
+ document.querySelector('#results').textContent=`${reports.filter(r=>r.passed).length}/${reports.length} passed\n`+JSON.stringify(reports,null,2);
+};
+</script></html>

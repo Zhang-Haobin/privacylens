@@ -84,17 +84,17 @@ OPENAI_BASE_URL=https://ai.novacode.top/v1
 
 This default is a third-party provider, not an OpenAI-hosted endpoint. Only the backend reads the key. Never put credentials in `dist`, browser storage or Git. Restart/redeploy after configuration changes.
 
-The model remains fixed to **gpt-6-luna**. There is no model selector or model fallback. An unknown OCR word ID triggers at most one full retry, with the same recognized text, after the user’s consent. Legacy `OPENAI_MODEL` environment variables are ignored; attempts to request another model are rejected before contacting the provider.
+The model remains fixed to **gpt-6-luna**. There is no model selector or model fallback. An unknown OCR word ID can trigger one complete regeneration with a corrective prompt and identical screened text, only when at least 5 seconds remain in the provider budget. Schema, transport, refusal and truncation failures are not automatically retried. Legacy `OPENAI_MODEL` environment variables are ignored; attempts to request another model are rejected before contacting the provider.
 
-`POST /api/ai?action=classify-text` accepts explicit consent, original dimensions and bounded OCR lines/words. It rejects images, duplicate IDs, invalid boxes and excessive text. The upstream request uses Chat Completions with strict JSON schema, `reasoning_effort: none` and `max_completion_tokens: 2048`. Compatible Markdown-wrapped complete JSON is accepted; malformed, conflicting, refused or truncated output does not partially replace masks. Each provider call times out after 45 seconds; the browser permits up to 100 seconds for the complete request and its possible retry. The provider must support these parameters; actual cost/retention depend on the provider.
+`POST /api/ai?action=classify-text` accepts explicit consent, original dimensions and bounded OCR lines/words. It rejects images, duplicate IDs, invalid boxes and excessive text. The upstream request uses Chat Completions with strict JSON schema, `reasoning_effort: none` and `max_completion_tokens: 2048`. Compatible Markdown-wrapped complete JSON is accepted; malformed, conflicting, refused or truncated output does not partially replace masks. A single 50-second backend deadline includes body reading, provider calls and parsing, below the unchanged 60-second function limit. Provider work reserves 2 seconds for final validation/response; the first attempt permits at most 35 seconds and a retry receives only the remaining budget. The browser permits 55 seconds. These shared values live in `dist/ai-policy.js`. The provider must support these parameters; actual cost/retention depend on the provider.
 
-The earlier image endpoint `POST /api/ai?action=detect` remains for compatibility and existing tests. It requires its own explicit consent and sends an unmasked JPEG. **The current webpage does not call this endpoint.** The former model-list action remains disabled.
+The earlier image endpoint `POST /api/ai?action=detect` is **disabled by default (HTTP 410)** before reading the image or contacting a provider. Compatibility code is retained behind the server-only `PRIVACYLENS_ENABLE_LEGACY_IMAGE_AI=true` flag; keep it unset for Phase 1. If deliberately enabled, it still requires independent image consent and sends an unmasked JPEG. **The current webpage does not call this endpoint.** The former model-list action remains disabled.
 
 The API has same-origin browser checks and request limits, but no user authentication or distributed rate limiter. Configure platform access/rate controls as appropriate for a public deployment. Same-origin checks do not authenticate arbitrary clients.
 
 ## Deploy
 
-Use this directory as the GitHub/Vercel repository root. `vercel.json` publishes `dist` and `api/ai.js`, with no install/build command and a 60-second function duration. Keep `lib`, `api`, `package.json`, the shared `dist/privacy-types.js` module and OCR assets in the deployment. The existing Git integration deploys pushes to `main` to Vercel production. The earlier Sites static-hosting manifest remains historical; that static-only host cannot run the Node API and is not updated by this deployment.
+Use this directory as the GitHub/Vercel repository root. `vercel.json` publishes `dist` and `api/ai.js`, with no install/build command and a 60-second function duration. Keep `lib`, `api`, `package.json`, the shared `dist/privacy-types.js`, `dist/technical-detection.js`, `dist/ai-policy.js` modules and OCR assets in the deployment. The existing Git integration deploys pushes to `main` to Vercel production. The earlier Sites static-hosting manifest remains historical; that static-only host cannot run the Node API and is not updated by this deployment.
 
 ## Verification
 
@@ -102,8 +102,11 @@ Use this directory as the GitHub/Vercel repository root. `vercel.json` publishes
 npm test
 node --check dist/app.js
 node --check dist/ocr.js
+node accuracy-lab/technical/predeploy-audit.mjs
 ```
 
 Tests cover local type/fallback and purpose registries, contextual actions, override persistence/reconciliation, label/value column and academic spans, provider contracts/errors, fixed-model restriction, OCR coordinate mapping, repeated identifiers, merging local/AI candidates, support rules, text-ID validation, input limits and rejection of image transfer on the text endpoint. Tests with mocked model results do not establish detection accuracy.
 
 See `QA.md` for the verification record. Detailed sample results remain in local `qa/ocr-integration/` and are excluded from the published source. Previous QA entries describe earlier versions. No general accuracy or privacy guarantee is claimed. English sample performance does not establish Chinese-language, mobile or real-world accuracy.
+
+See `SECURITY_HARDENING_REPORT.md` for the local blocker remediation and deployment recommendation. The AI dialog includes a text-only preview of the screened payload. Detection normalizes a separate view and preserves original OCR IDs/geometry; uncertain recognised credential regions are screened conservatively. Unlabelled unknown formats and severely corrupted OCR remain possible leaks; preview and cancellation supplement automatic screening.

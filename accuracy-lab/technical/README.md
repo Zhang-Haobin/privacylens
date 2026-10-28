@@ -41,3 +41,17 @@ node accuracy-lab/technical/regression.mjs
 ```
 
 See [REPORT.md](REPORT.md) for measured results and limitations. This small, clean synthetic English corpus is a development test set, not a general accuracy benchmark or proof that unknown credentials cannot leak.
+
+## Security hardening checks
+
+```sh
+node accuracy-lab/technical/predeploy-audit.mjs
+node accuracy-lab/technical/predeploy-image-audit.mjs
+node accuracy-lab/technical/predeploy-browser-server.mjs
+```
+
+The first check asserts screening of credential fragments by original word ID at the browser serializer, server, and both mock provider attempts; it also tests direct unscreened clients and records observed remaining attempt budgets. It fails independently on any supported client/provider leak, mutation, lost diagnostic control, retry mismatch or insufficient budget. Unknown unlabelled formats are recorded as a limitation, not certified as safe.
+
+The image audit reruns English OCR on four synthetic Java/Python/JavaScript/control screenshots, including a real OCR substitution of a hyphen with an em dash. It inspects credential-shaped OCR fragments and both serialized mock provider bodies, rather than relying only on exact source strings. Reports go to ignored `qa/predeployment/`.
+
+The browser server listens only on localhost:4177, never reads `.env` and never calls a remote provider. `/qa-audit.html` exercises all supported formats through actual browser POSTs and the production handler. The editor includes QA-only image loading, gateway error injection and an observer that saves the exact production PNG blob in ignored `qa/hardening-browser/`. The preview assets are outside `dist`; production does not expose these controls or request captures.

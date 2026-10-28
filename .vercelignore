@@ -1,0 +1,15 @@
+# Deploy only the static site and the server's traced source dependencies.
+# Local credentials, test captures, reports, and QA tooling stay off Vercel.
+/*
+!dist
+!api
+!lib
+!package.json
+!package-lock.json
+!vercel.json
+
+# Never allow credentials or generated QA files nested inside an allowed folder.
+**/.env
+**/.env.*
+**/*.log
+**/.DS_Store

@@ -615,3 +615,5 @@ summary:focus-visible, textarea:focus-visible { outline: 3px solid #558b6b; outl
 
 .ai-type-suggestion { margin: 8px 0; padding: 10px; border: 1px solid #b5cfad; border-radius: 9px; background: #f1f7ed; color: #365c3b; font-size: 12px; line-height: 1.5; }
 .ai-type-suggestion button { margin: 7px 10px 0 0; }
+
+.ai-send-preview { max-height: 220px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background: var(--paper, #f5f5ef); font-size: 12px; user-select: text; }
