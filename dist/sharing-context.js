@@ -72,7 +72,7 @@ export function sharingPlan(audience, purpose, documentType = 'delivery') {
     label: `${recipient?.label || 'Recipient not selected'} · ${task?.label || 'Purpose not selected'}`,
     keep: lookup ? 'Order / tracking numbers, delivery status and relevant dates.' : task?.keep || 'Choose a recipient and purpose. Uncertain private fields stay masked.',
     hide: 'Unnecessary identifiers, contact details, credentials and private content.',
-    note: `${recipient?.note || 'No recipient has been assumed.'}${purpose === 'custom' ? ' Custom descriptions stay on this device; generic conservative rules apply.' : ''}${documentType === 'transcript' && purpose === 'submission' ? ' Check whether the recipient accepts a redacted copy.' : ''}`
+    note: `${recipient?.note || 'No recipient has been assumed.'}${purpose === 'custom' ? ' Custom descriptions use local rules until you choose to send one for AI sharing suggestions.' : ''}${documentType === 'transcript' && purpose === 'submission' ? ' Check whether the recipient accepts a redacted copy.' : ''}`
   };
 }
 

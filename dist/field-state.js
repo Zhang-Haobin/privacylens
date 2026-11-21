@@ -39,6 +39,28 @@ export function reconcileFields(previous, incoming) {
   return { fields, restored, retained: retained.length };
 }
 
+export function preserveEditedRegions(previous, fields) {
+  const existingIds = new Set(previous.map(field => field.id));
+  const edited = previous.filter(field => field.userOverride === 'keep' || field.geometryOverride);
+  return fields.map(field => {
+    if (existingIds.has(field.id)) return field;
+    // A new classification can describe the same physical value as a row the
+    // user already edited. Use the original OCR region when a box was adjusted.
+    const overlapping = edited.filter(old => sameRegion(old.matchingRect || old.rect, field.rect));
+    const moved = overlapping.filter(old => old.geometryOverride && fieldText(old) && fieldText(old) === fieldText(field));
+    const adjusted = moved.length === 1 ? moved[0] : null;
+    const revealed = overlapping.some(old => old.userOverride === 'keep');
+    if (!adjusted && !revealed) return field;
+    return {
+      ...field,
+      rect: adjusted ? [...adjusted.rect] : field.rect,
+      matchingRect: adjusted ? [...field.rect] : field.matchingRect,
+      geometryOverride: Boolean(adjusted),
+      userOverride: revealed ? 'keep' : adjusted.userOverride
+    };
+  });
+}
+
 // Describe only AI regions that can be mapped unambiguously to a review row.
 function overlaps(a, b) {
   if (a.wordIds?.some(id => b.wordIds?.includes(id))) return true;

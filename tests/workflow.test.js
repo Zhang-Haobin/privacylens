@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { sharingProfiles, profileForContext } from '../dist/workflow.js';
+import { sharingProfiles, profileForContext, matchCustomPurpose, resolveSharingChoice } from '../dist/workflow.js';
 import { documentTypes, purposeRegistry } from '../dist/document-context.js';
 import { recommendField } from '../dist/sharing-context.js';
 import { recognitionLanguage } from '../dist/ocr.js';
@@ -47,6 +47,41 @@ test('default recognition explicitly reads English and both Chinese scripts with
   assert.equal(recognitionLanguage('eng'), 'eng');
   assert.equal(recognitionLanguage('eng+chi_tra'), 'eng+chi_tra');
   assert.throws(() => recognitionLanguage('unknown'));
+});
+
+test('local purpose matching distinguishes lookup, return, and general inquiries in both languages', () => {
+  for (const text of ['Help me track my delayed package.', 'I want the delivery company to locate my package.', '想查詢我的包裹送到哪裡', '请帮我查物流进度']) {
+    assert.deepEqual(matchCustomPurpose(text, 'delivery', 'support'), { status: 'matched', purpose: 'lookup' });
+  }
+  for (const text of ['I want to request a refund for my order.', '我想為這個訂單退款。']) {
+    assert.deepEqual(matchCustomPurpose(text, 'delivery', 'support'), { status: 'matched', purpose: 'return' });
+  }
+  for (const text of ['Does the company deliver on weekends?', 'I want to ask about my package.']) {
+    assert.deepEqual(matchCustomPurpose(text, 'delivery', 'support'), { status: 'unknown' });
+  }
+  for (const text of ['I do not want to track my package.', 'Can I track or refund my order?', '我不想追蹤我的包裹']) {
+    assert.deepEqual(matchCustomPurpose(text, 'delivery', 'support'), { status: 'ambiguous' });
+  }
+});
+
+test('custom purpose uses a conservative policy until confirmation and clearing restores the preset', () => {
+  const draft = { documentType: 'delivery', context: 'support', purpose: 'return', customPurpose: 'Track my package' };
+  const recommend = draft => recommendField({ category: 'order' }, { ...draft, purpose: resolveSharingChoice(draft).purpose }).action;
+  assert.equal(recommend(draft), 'redact');
+  assert.equal(recommend({ ...draft, confirmedPurpose: 'lookup' }), 'keep');
+  assert.equal(recommend({ ...draft, customPurpose: '' }), 'review');
+  assert.equal(recommend({ ...draft, customPurpose: 'Does the company deliver on weekends?', confirmedPurpose: 'lookup' }), 'redact');
+  for (const context of ['public', 'organization']) assert.equal(recommend({ ...draft, context, confirmedPurpose: 'lookup' }), 'redact');
+});
+
+test('a late type suggestion can mark a draft incompatible without replacing audience, preset, or text', () => {
+  const draft = Object.freeze({ documentType: 'general', context: 'organization', purpose: 'submit', customPurpose: 'Please check my package' });
+  assert.equal(resolveSharingChoice(draft).compatible, true);
+  const detected = { ...draft, documentType: 'delivery' };
+  const result = resolveSharingChoice(detected);
+  assert.equal(result.compatible, false);
+  assert.equal(result.purpose, 'custom');
+  assert.deepEqual(detected, { ...draft, documentType: 'delivery' });
 });
 
 test('merged label/value OCR tokens still preserve a matching GPA choice', async () => {

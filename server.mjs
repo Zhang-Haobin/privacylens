@@ -1,6 +1,6 @@
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
-import { handleAI } from './lib/ai.js';
+import { handleAI, handleAIProvider } from './lib/ai.js';
 import { readdir } from 'node:fs/promises';
 
 const files = new Map([
@@ -19,6 +19,7 @@ const files = new Map([
   ['/technical-detection.js', ['technical-detection.js', 'text/javascript; charset=utf-8']],
   ['/contextual-detection.js', ['contextual-detection.js', 'text/javascript; charset=utf-8']],
   ['/sharing-context.js', ['sharing-context.js', 'text/javascript; charset=utf-8']],
+  ['/protection.js', ['protection.js', 'text/javascript; charset=utf-8']],
   ['/editor-geometry.js', ['editor-geometry.js', 'text/javascript; charset=utf-8']],
   ['/privacy-types.js', ['privacy-types.js', 'text/javascript; charset=utf-8']],
   ['/document-context.js', ['document-context.js', 'text/javascript; charset=utf-8']],
@@ -40,14 +41,16 @@ const port = Number(process.env.PORT || 4173);
 createServer(async (incoming, outgoing) => {
   try {
     const url = new URL(incoming.url, `http://${incoming.headers.host}`);
-    if (url.pathname === '/api/ai') {
+    if (url.pathname === '/api/ai' || url.pathname === '/api/ai-provider') {
+      const controller = new AbortController();
+      outgoing.once('close', () => { if (!outgoing.writableEnded) controller.abort(); });
       const headers = new Headers();
       for (const [name, value] of Object.entries(incoming.headers)) if (typeof value === 'string') headers.set(name, value);
       const request = new Request(url, {
-        method: incoming.method, headers,
+        method: incoming.method, headers, signal: controller.signal,
         ...(!['GET', 'HEAD'].includes(incoming.method) ? { body: incoming, duplex: 'half' } : {})
       });
-      const response = await handleAI(request);
+      const response = url.pathname === '/api/ai-provider' ? handleAIProvider(request) : await handleAI(request);
       outgoing.writeHead(response.status, Object.fromEntries(response.headers));
       outgoing.end(Buffer.from(await response.arrayBuffer()));
       return;

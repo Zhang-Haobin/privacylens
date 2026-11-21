@@ -68,6 +68,18 @@ function wordsInSpan(line, start, end) {
     return first < end && last > start;
   });
 }
+const phoneLabel = /(?:\b(?:tel(?:ephone)?|phone|mobile|contact)\b(?:\s*(?:number|no\.?))?|(?:電\s*話|电\s*话|手\s*機|手\s*机)(?:\s*[號号](?:\s*[碼码])?)?)[\s.:：]*$/iu;
+function phoneWordGroups(line, requireEvidence) {
+  const text = line.words.map(word => word.text).join(' ');
+  const groups = [];
+  for (const match of text.matchAll(/(?<![\p{L}\p{N}])(?:\+\s*)?(?:\(\d{2,4}\)\s*)?\d[\d() .-]{5,}\d(?![\p{L}\p{N}])/gu)) {
+    const digits = match[0].replace(/\D/g, '').length;
+    if (digits < 7 || digits > 15) continue;
+    if (requireEvidence && !match[0].startsWith('+') && !phoneLabel.test(text.slice(0, match.index))) continue;
+    groups.push(wordsInSpan(line, match.index, match.index + match[0].length));
+  }
+  return groups;
+}
 const identifierLabels = {
   transaction: /(?:transaction\s*(?:id|number|#)|交\s*易\s*(?:編\s*號|编\s*号|號\s*碼|号\s*码))\s*[:：#.]?/i,
   tracking: /(?:tracking(?:\s*(?:number|no\.?))?|waybill|trk\s*#|運\s*單\s*(?:號)?|运\s*单\s*(?:号)?|快\s*遞\s*單|快\s*递\s*单)\s*[:：#.]?/i,
@@ -95,8 +107,7 @@ function valueWords(line, category) {
     return wordsInSpan(line, start, label.index + label[0].length + last.index + last[0].length);
   }
   if (category === 'phone') {
-    const match = original.match(/\+?\d[\d() .-]{5,}\d/);
-    return match ? wordsInSpan(line, match.index, match.index + match[0].length) : [];
+    return phoneWordGroups(line, false).flat();
   }
   if (category === 'payment') {
     const matches = [...original.matchAll(/\b\d{4}\b/g)];
@@ -143,15 +154,18 @@ export function localSuggestions(document) {
     else if (/\b(?:tracking|waybill|trk\s*#)|運單|运单|快遞單|快递单/i.test(text)) category = 'tracking';
     else if (/\border\s*(?:number|no\.?|#|:)|訂單(?:號|编|編)|订单(?:号|编)/i.test(text)) category = 'order';
     else if (/\b(?:reference|shipment\s*ref|ref\s*:)/i.test(text)) category = 'reference';
-    else if (/[\w.+-]+\s*@\s*[\w.-]+\.[a-z]{2,}/i.test(text) || /\bemail\s*[:：]|電郵|电邮|郵箱|邮箱/i.test(text)) category = 'email';
-    else if (/\b(?:tel|phone|mobile)\s*[.:：]|電話|电话|手機|手机/i.test(text) || /(?:\+\d[\d ()-]{6,}\d)/.test(text)) category = 'phone';
-    else if (/(?:[*•·xX]{2,}|visa|mastercard|amex).{0,12}\d{4}\b/i.test(text)) category = 'payment';
-    if (category) {
-      const email = category === 'email' ? original.match(/[\w.+-]+\s*@\s*[\w.-]+\.[a-z]{2,}/i) : null;
-      const candidates = email ? wordsInSpan(line, email.index, email.index + email[0].length) : valueWords(line, category) ?? line.words;
+    function addWords(category, candidates) {
       const wordIds = candidates.filter(word => !occupied.has(word.id)).map(word => word.id);
-      if (wordIds.length) fields.push({ category, role: 'unknown', wordIds, source: 'local' });
+      if (!wordIds.length) return;
+      wordIds.forEach(id => occupied.add(id));
+      fields.push({ category, role: 'unknown', wordIds, source: 'local' });
     }
+    if (category) addWords(category, valueWords(line, category) ?? line.words);
+    const emails = [...original.matchAll(/[\w.+-]+\s*@\s*[\w.-]+\.[a-z]{2,}/gi)];
+    for (const email of emails) addWords('email', wordsInSpan(line, email.index, email.index + email[0].length));
+    for (const phone of phoneWordGroups(line, true)) addWords('phone', phone);
+    if (!emails.length && /\bemail\s*[:：]|電郵|电邮|郵箱|邮箱/i.test(text)) addWords('email', line.words);
+    if (!category && /(?:[*•·xX]{2,}|visa|mastercard|amex).{0,12}\d{4}\b/i.test(text)) addWords('payment', valueWords(line, 'payment'));
   }
   // OCR may split a label and its value into separate columns on one baseline.
   // Link only a nearby value to its right, with a category-specific value shape.
@@ -209,6 +223,47 @@ export function validateClassifications(fields, document) {
     return { category: field.category, role: field.role, wordIds: [...new Set(field.wordIds)], source: 'ai' };
   });
 }
+function sameCandidate(a, b) {
+  if (a.category !== b.category) return false;
+  if (a.wordIds.some(id => b.wordIds.includes(id))) return true;
+  if (a.category !== 'address' || a.lineBounded || b.lineBounded || a.role !== b.role) return false;
+  const [x, y, width, height] = a.rect;
+  const [otherX, otherY, otherWidth, otherHeight] = b.rect;
+  const vertical = Math.max(0, Math.min(y + height, otherY + otherHeight) - Math.max(y, otherY));
+  const gap = Math.max(0, Math.max(x, otherX) - Math.min(x + width, otherX + otherWidth));
+  return vertical / Math.min(height, otherHeight) >= 0.65 && gap <= 12;
+}
+
+function mergeCandidates(candidates) {
+  const visited = new Set();
+  const merged = [];
+  for (const first of candidates) {
+    if (visited.has(first)) continue;
+    const group = [first];
+    visited.add(first);
+    // Follow connections between original candidates. A merged box can span
+    // unrelated text, so use it for coverage only.
+    for (const member of group) {
+      for (const candidate of candidates) {
+        if (visited.has(candidate) || !sameCandidate(member, candidate)) continue;
+        visited.add(candidate);
+        group.push(candidate);
+      }
+    }
+    const x = Math.min(...group.map(field => field.rect[0]));
+    const y = Math.min(...group.map(field => field.rect[1]));
+    const right = Math.max(...group.map(field => field.rect[0] + field.rect[2]));
+    const bottom = Math.max(...group.map(field => field.rect[1] + field.rect[3]));
+    merged.push({
+      ...first,
+      role: group.find(field => field.role !== 'unknown')?.role || 'unknown',
+      rect: [x, y, right - x, bottom - y],
+      wordIds: [...new Set(group.flatMap(field => field.wordIds))]
+    });
+  }
+  return merged;
+}
+
 export function suggestionsToFields(suggestions, document) {
   const result = [];
   for (const suggestion of suggestions) {
@@ -242,23 +297,8 @@ export function suggestionsToFields(suggestions, document) {
     }
   }
   // AI can refine a local candidate, but must never erase a rule-based candidate.
-  const unique = [];
-  for (const field of result) {
-    const previous = unique.find(f => f.category === field.category && (f.wordIds.some(id => field.wordIds.includes(id)) || (field.category === 'address' && !field.lineBounded && !f.lineBounded && f.role === field.role && (() => {
-      const a = f.rect, b = field.rect;
-      const vertical = Math.max(0, Math.min(a[1] + a[3], b[1] + b[3]) - Math.max(a[1], b[1]));
-      const gap = Math.max(0, Math.max(a[0], b[0]) - Math.min(a[0] + a[2], b[0] + b[2]));
-      return vertical / Math.min(a[3], b[3]) >= 0.65 && gap <= 12;
-    })())));
-    if (!previous) { unique.push(field); continue; }
-    const x = Math.min(previous.rect[0], field.rect[0]), y = Math.min(previous.rect[1], field.rect[1]);
-    const right = Math.max(previous.rect[0] + previous.rect[2], field.rect[0] + field.rect[2]);
-    const bottom = Math.max(previous.rect[1] + previous.rect[3], field.rect[1] + field.rect[3]);
-    previous.rect = [x, y, right - x, bottom - y]; previous.wordIds = [...new Set([...previous.wordIds, ...field.wordIds])];
-    if (previous.role === 'unknown' && field.role !== 'unknown') previous.role = field.role;
-  }
   const counts = {};
-  return unique.map((field, index) => {
+  return mergeCandidates(result).map((field, index) => {
     const label = `${roleNames[field.role] ? `${roleNames[field.role]} · ` : ''}${categoryNames[field.category]}`;
     counts[label] = (counts[label] || 0) + 1;
     return { ...field, id: `ocr-${index + 1}`, name: `${label} ${counts[label]}`, anchor: document.words.filter(word => field.wordIds.includes(word.id)).map(word => word.text).join(' ') };

@@ -19,7 +19,7 @@ export const purposeRegistry = {
   post: { label: 'Share a conversation publicly', keep: 'The non-private messages needed to explain the story.' },
   report: { label: 'Report harassment or misconduct', keep: 'Relevant messages and timing. Review identities before including them.' },
   submit: { label: 'Submit to an organization', keep: 'Only the content requested by the recipient.' },
-  custom: { label: 'Other / describe my purpose', keep: 'Review which information is needed for your custom purpose.' }
+  custom: { label: 'Custom purpose', keep: 'Review which information is needed for your custom purpose.' }
 };
 export function purposesFor(type) { return (Object.hasOwn(documentTypes, type) ? documentTypes[type] : documentTypes.general).purposes; }
 

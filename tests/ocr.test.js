@@ -79,6 +79,38 @@ test('local and AI phone suggestions combine into one switch without losing the 
   assert.ok(fields[0].rect[0] > 20 && fields[0].rect[0] <= 90 && fields[0].rect[0] + fields[0].rect[2] >= 260);
 });
 
+test('local detection covers a contact number and email on the same OCR line', () => {
+  const row = [word('Contact:', 10, 20, 72, 36), word('91234567', 84, 20, 161, 36),
+    word('|', 169, 20, 174, 36), word('demo@example.test', 184, 20, 325, 36)];
+  const doc = makeDocument([page(row)], 480, 100, 480, 100);
+  const fields = suggestionsToFields(localSuggestions(doc), doc);
+  const byCategory = Object.fromEntries(fields.map(field => [field.category, field]));
+  assert.equal(fields.length, 2);
+  assert.deepEqual(byCategory.phone.wordIds, ['w2']);
+  assert.deepEqual(byCategory.email.wordIds, ['w4']);
+  assert.deepEqual(byCategory.phone.rect, [80, 16, 85, 24]);
+  assert.deepEqual(byCategory.email.rect, [180, 16, 149, 24]);
+});
+
+test('a bridge merges all connected candidates and keeps other categories and locations separate', () => {
+  const row = [word('Alex', 10, 20, 42, 36), word('Q.', 48, 20, 62, 36), word('Example', 68, 20, 145, 36),
+    word('Alex', 10, 78, 42, 94), word('Example', 50, 78, 125, 94)];
+  const doc = makeDocument([page(row)], 240, 130, 240, 130);
+  const fields = suggestionsToFields(validateClassifications([
+    { category: 'name', role: 'unknown', wordIds: ['w1'] },
+    { category: 'name', role: 'unknown', wordIds: ['w3'] },
+    { category: 'name', role: 'recipient', wordIds: ['w1', 'w2', 'w3'] },
+    { category: 'name', role: 'recipient', wordIds: ['w4', 'w5'] },
+    { category: 'other', role: 'unknown', wordIds: ['w3'] }
+  ], doc), doc);
+  assert.deepEqual(fields.map(field => [field.category, field.wordIds, field.rect]), [
+    ['name', ['w1', 'w2', 'w3'], [6, 16, 143, 24]],
+    ['name', ['w4', 'w5'], [6, 74, 123, 24]],
+    ['other', ['w3'], [64, 16, 85, 24]]
+  ]);
+  assert.equal(fields[0].role, 'recipient');
+});
+
 test('identifier masks select the code, not nearby service text or the label', () => {
   const doc = makeDocument([page([
     word('TRK#', 10, 10, 60, 30), word('7750', 68, 10, 120, 30), word('9348', 128, 10, 180, 30), word('2211', 188, 10, 240, 30), word('INTL', 320, 10, 370, 30), word('PRIORITY', 380, 10, 480, 30),

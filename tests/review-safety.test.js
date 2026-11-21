@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { applyRecommendations, guardSuggestedReveals } from '../dist/sharing-context.js';
-import { reconcileFields, aiInsights, activeMasks, coverageSummary } from '../dist/field-state.js';
+import { reconcileFields, preserveEditedRegions, aiInsights, activeMasks, coverageSummary } from '../dist/field-state.js';
 
 test('context changes keep previously masked suggestions hidden until explicitly reviewed', () => {
   const fields = [{ id: 'course', category: 'course', name: 'Course', hidden: true }, { id: 'name', category: 'name', hidden: true, userOverride: 'keep' }];
@@ -23,7 +23,7 @@ test('matched rescans preserve pending review and earlier mask boundaries', () =
   assert.equal(result.id, 'old'); assert.equal(result.pendingReveal, true); assert.deepEqual(result.rect, [10,10,80,20]);
 });
 
-test('AI analysis reapplies suggested masks to visible fields and preserves other coverage', () => {
+test('explicit reapply restores recommended masks to visible fields and preserves other coverage', () => {
   const context = { documentType: 'delivery', context: 'support', purpose: 'lookup' };
   const previous = [
     { id: 'recipient', category: 'name', anchor: 'Demo Recipient', rect: [8, 9, 84, 22], matchingRect: [10, 10, 80, 20], geometryOverride: true, hidden: false, userOverride: 'keep' },
@@ -49,6 +49,28 @@ test('AI analysis reapplies suggested masks to visible fields and preserves othe
   const manual = [{ id: 1, rect: [110, 20, 40, 40], hidden: true }];
   assert.deepEqual(activeMasks(applied, manual).map(mask => mask.rect), [previous[0].rect, previous[2].rect, previous[3].rect, previous[4].rect, manual[0].rect]);
   assert.equal(coverageSummary(applied, manual).hidden, 4);
+});
+
+test('AI findings respect a revealed region and its latest adjusted geometry, with other new fields masked', () => {
+  const context = { documentType: 'delivery', context: 'public', purpose: 'share' };
+  const originalRect = [10, 20, 90, 20];
+  const latestRect = [9, 20, 94, 25];
+  const previous = [
+    { id: 'order', category: 'order', anchor: 'DEMO-001', rect: latestRect, matchingRect: originalRect,
+      geometryOverride: true, hidden: false, userOverride: 'keep' }
+  ];
+  const incoming = [
+    { id: 'reclassified', category: 'account', anchor: 'DEMO-001', rect: originalRect },
+    { id: 'new', category: 'name', anchor: 'Demo Recipient', rect: [10, 85, 95, 25] }
+  ];
+  const candidates = preserveEditedRegions(previous, reconcileFields(previous, incoming).fields);
+  const fields = guardSuggestedReveals(previous, applyRecommendations(candidates, context));
+  assert.equal(fields[0].hidden, false);
+  assert.equal(fields[0].userOverride, 'keep');
+  assert.equal(fields[0].recommendation.action, 'redact');
+  assert.deepEqual(fields[0].rect, latestRect);
+  assert.equal(fields[1].hidden, true);
+  assert.equal(fields.find(field => field.id === 'order').hidden, false);
 });
 
 test('AI insights distinguish prior regions and skip ambiguous mappings', () => {

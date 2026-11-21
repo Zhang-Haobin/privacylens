@@ -3,13 +3,24 @@ import assert from 'node:assert/strict';
 import { credentialAuditCases, auditDocument, auditEnv } from '../accuracy-lab/technical/credential-audit-fixtures.mjs';
 import { textPayload } from '../dist/ocr-core.js';
 import { sanitizeOCRLines } from '../dist/technical-detection.js';
-import { handleAI } from '../lib/ai.js';
+import { handleAI, handleAIProvider } from '../lib/ai.js';
 import { AI_BUDGET } from '../dist/ai-policy.js';
 import { readAPI } from '../dist/api-client.js';
 import { readFile } from 'node:fs/promises';
 const request = body => new Request('https://site.example/api/ai?action=classify-text',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
 const completion = fields => Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify({fields})}}]});
 const invalid = [{category:'secret',role:'unknown',wordIds:['w99999']}];
+test('provider disclosure publishes only the configured host and requires no API key', async () => {
+  const request = new Request('https://site.example/api/ai-provider');
+  const response = handleAIProvider(request, { env: { OPENAI_BASE_URL: 'https://proxy.example:8443/private/path' } });
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('Cache-Control'), 'no-store');
+  assert.deepEqual(await response.json(), { provider: 'proxy.example:8443' });
+  const invalidURL = handleAIProvider(request, { env: { OPENAI_BASE_URL: 'https://person:password@example.test' } });
+  assert.equal(invalidURL.status, 503);
+  assert.doesNotMatch(await invalidURL.text(), /person|password/);
+  assert.equal(handleAIProvider(new Request(request.url, { method: 'POST' })).status, 405);
+});
 for (const fixture of credentialAuditCases.filter(c=>!c.limitation)) {
   test(`outgoing credential screening: ${fixture.id}`, async()=>{
     const doc=auditDocument(fixture.rows), original=JSON.stringify(doc), client=textPayload(doc);
