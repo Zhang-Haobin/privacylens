@@ -84,7 +84,7 @@
       <footer><span>PrivacyLens / CCST9003 prototype</span><span>Thoughtful sharing, on your terms.</span></footer>
     </section>
     <section id="workspacePage" class="workspace-page" hidden>
-      <div class="workspace-bar"><div class="workspace-context"><button id="typeButton" class="type-chip">Document type</button><button id="contextButton" class="context-chip">Who are you sharing with? <span>Change ↗</span></button></div><div class="workspace-actions"><button id="newImageButton" class="text-button">New image</button><button id="moreButton" class="tool-button" aria-label="More options">•••</button></div></div>
+      <div class="workspace-bar"><div class="workspace-context"><button id="typeButton" class="type-chip">Document type</button><button id="contextButton" class="context-chip">Who are you sharing with? <span>Change ↗</span></button><button id="workspaceUndoContext" class="inline-action workspace-context-undo" type="button" hidden>Undo settings change</button></div><div class="workspace-actions"><button id="newImageButton" class="text-button">New image</button><button id="moreButton" class="tool-button" aria-label="More options">•••</button></div></div>
       <div class="analysis-banner" id="analysisBanner" hidden><span class="activity-dot"></span><p id="scanProgress" role="status">Reading your image on this device…</p><button id="cancelScan" class="inline-action">Cancel</button></div>
       <section id="editorWorkspace" class="workspace" aria-label="Screenshot editor">
         <section class="preview-panel" aria-labelledby="previewHeading">
@@ -109,7 +109,10 @@
     </section>
   </main>
   <dialog id="contextDialog" class="context-dialog" aria-labelledby="contextHeading">
-    <div class="dialog-top"><span class="eyebrow">SHARING SETTINGS</span><button class="icon-button" data-close="contextDialog" aria-label="Close sharing context"><svg><use href="#i-x"/></svg></button></div>
+    <div class="dialog-top">
+      <div class="context-brand"><span class="brand-mark" aria-hidden="true"><svg><use href="#i-shield"/></svg></span><div><strong>PrivacyLens</strong><span class="eyebrow">SHARING SETTINGS</span></div></div>
+      <button class="icon-button" data-close="contextDialog" aria-label="Close sharing settings"><svg><use href="#i-x"/></svg></button>
+    </div>
     <div class="context-body">
       <div class="suggested-type"><span id="detectedType"></span><button id="editTypeButton" class="inline-action">Change type</button></div>
       <details id="typeSettings" class="type-settings">
@@ -124,63 +127,107 @@
       </details>
       <h2 id="contextHeading">Who are you sharing with?</h2>
       <div id="sharingAudiences" class="sharing-profiles" role="group" aria-label="Audience"></div>
-      <div class="purpose-fields">
-        <label class="compact-label" for="sharingPurpose">Purpose
-          <select id="sharingPurpose"></select>
-        </label>
-        <label class="compact-label" for="customPurpose">Or describe your purpose
-          <textarea id="customPurpose" maxlength="500" rows="2" placeholder="I need the delivery company to locate my package." aria-describedby="purposeMode"></textarea>
-        </label>
+      <p id="organizationHint" class="context-audience-hint" hidden>For an order screenshot going to a seller or carrier’s support team, change the type to Delivery / order, then choose Official support.</p>
+      <div class="context-purpose-section" role="group" aria-labelledby="purposeHeading">
+        <h3 id="purposeHeading">Why are you sharing this screenshot?</h3>
+        <div class="purpose-fields">
+          <label class="compact-label" for="sharingPurpose"><span id="commonPurposeLabel">Choose a common purpose</span>
+            <select id="sharingPurpose" aria-describedby="purposeMode"></select>
+          </label>
+          <label class="compact-label" for="customPurpose">Or describe your purpose
+            <textarea id="customPurpose" maxlength="500" rows="2" placeholder="Type your reason here…" aria-describedby="purposeMode"></textarea>
+          </label>
+        </div>
+        <div class="purpose-mode">
+          <p id="purposeMode" role="status"></p>
+          <button id="confirmPurpose" class="inline-action" type="button" hidden>Confirm</button>
+        </div>
       </div>
-      <div class="purpose-mode">
-        <p id="purposeMode" role="status">Choose a purpose for local suggestions.</p>
-        <button id="confirmPurpose" class="tool-button" hidden></button>
-      </div>
-      <div id="contextConflict" class="context-feedback" hidden>
+      <div id="contextConflict" class="context-conflict" hidden>
         <p id="contextConflictMessage" role="status"></p>
-        <button id="acceptContextConflict" type="button">Keep my choices with conservative masks</button>
+        <button id="acceptContextConflict" class="inline-action" type="button">Keep my choices</button>
       </div>
-      <details class="context-explanation" id="contextExplanation"><summary>See privacy recommendations</summary>
-        <dl class="context-plan"><div><dt>Keep useful</dt><dd id="contextKeep"></dd></div><div><dt>Mask private</dt><dd id="contextHide"></dd></div></dl>
-        <p id="contextNote"></p>
+      <details class="context-explanation" id="contextExplanation">
+        <summary>How will my information be protected?</summary>
+        <p>Local suggestions for this copy. Check your actual masks in Review.</p>
+        <dl class="context-plan">
+          <div><dt id="contextHideLabel">What to hide</dt><dd id="contextHide"></dd></div>
+          <div id="contextOrderPlan" hidden><dt>Order and tracking numbers</dt><dd id="contextOrder"></dd></div>
+          <div><dt id="contextKeepLabel">What to keep</dt><dd id="contextKeep"></dd></div>
+        </dl>
+        <p id="contextNote" hidden></p>
       </details>
-      <div class="context-feedback" id="contextFeedback" hidden><p id="contextChanges" role="status"></p><button id="undoContext" type="button">Undo context change</button></div>
+      <div class="context-update" id="contextFeedback" hidden>
+        <svg aria-hidden="true"><use href="#i-check"/></svg><span>Sharing settings updated</span>
+        <span aria-hidden="true">·</span><button id="undoContext" class="inline-action" type="button" aria-label="Undo sharing settings change">Undo</button>
+      </div>
     </div>
     <div class="choose-progress" id="chooseProgress" hidden>
       <span class="activity-dot" id="chooseProgressDot" aria-hidden="true"></span><p id="chooseProgressMessage" role="status">Reading text on your device…</p>
       <button id="retryChooseOCR" class="inline-action" hidden>Retry reading</button>
     </div>
-    <div class="context-footer"><button id="skipContext" class="text-button">Review manually</button><button id="continueContext" class="primary-button">Review image <svg><use href="#i-arrow"/></svg></button></div>
+    <div class="context-footer">
+      <div class="context-manual"><button id="skipContext" class="text-button" aria-describedby="manualReviewHint">Review manually</button><p id="manualReviewHint" class="context-footer-hint">Open the editor and check masks yourself.</p></div>
+      <div class="context-continue"><button id="continueContext" class="primary-button" aria-describedby="reviewImageStatus">Review image <svg aria-hidden="true"><use href="#i-arrow"/></svg></button><p id="reviewImageStatus" class="context-footer-hint" role="status"></p></div>
+    </div>
   </dialog>
   <dialog id="moreDialog" aria-labelledby="moreHeading"><div class="dialog-top"><span class="eyebrow">MORE OPTIONS</span><button class="icon-button" data-close="moreDialog" aria-label="Close more options"><svg><use href="#i-x"/></svg></button></div><h2 id="moreHeading">Fine-tune your workflow.</h2><label class="ocr-language" for="ocrLanguage">Recognition language<select id="ocrLanguage"><option value="auto">English + Chinese (default)</option><option value="eng">English</option><option value="eng+chi_tra">繁體中文 + English</option><option value="eng+chi_sim">简体中文 + English</option></select></label><p class="type-evidence">The default reads English, Traditional and Simplified Chinese together. Fictional English examples use the English model.</p><button id="ocrButton" class="tool-button">Read text again on this device</button><button id="cancelDetectionButton" class="tool-button" hidden>Cancel detection</button><p id="aiStatus" class="ai-status" role="status"></p><details class="advanced-settings"><summary>Advanced settings</summary><label class="compact-label review-width-setting" for="reviewWidth">Review panel width <output id="reviewWidthValue">380 px</output><input id="reviewWidth" type="range" min="340" max="460" step="10" value="380"></label><label class="compact-label" for="recipientDetail">Recipient details (optional)<input id="recipientDetail" maxlength="120" placeholder="e.g. a university admissions team"></label><p class="type-evidence">Local note only. The recipient is not verified by this app.</p><button id="resetButton" class="tool-button" aria-label="Reset recommendations and remove manual masks"><svg><use href="#i-reset"/></svg> Reset choices &amp; added masks</button><button id="motionButton" class="tool-button" aria-pressed="true">Animation on</button></details><details class="advanced-settings"><summary>Load another fictional example</summary><label class="compact-label" for="sampleSelect">Fictional examples<select id="sampleSelect"><option value="delivery">Delivery / order</option><option value="transcript">Academic transcript</option><option value="chat">Chat conversation</option><option value="technical_screenshot">Technical screenshot</option></select></label><button id="sampleButton" class="sample-card"><span><strong id="sampleTitle">Delivery / order</strong><small id="sampleMeta">Fictional example</small></span><svg><use href="#i-arrow"/></svg></button></details></dialog>
   <dialog id="aiDialog" aria-labelledby="aiHeading">
-    <div class="dialog-top"><span class="eyebrow">OPTIONAL AI DETECTION</span><button class="icon-button" data-close="aiDialog" aria-label="Close AI assistance"><svg><use href="#i-x"/></svg></button></div>
-    <h2 id="aiHeading">Another look at the text.</h2>
-    <p>AI can find private details that local reading missed. Your image stays on this device.</p>
-    <p id="aiPrerequisite" class="ai-help" hidden>Read text locally first to enable AI detection.</p>
-    <details id="aiDataDetails" class="scan-details ai-disclosure">
-      <summary>What data will be sent?</summary>
-      <p>Your browser sends screened OCR text, word layout and image dimensions to this site’s server. The server screens the text again and forwards text and word layout to <strong data-ai-provider>the configured AI provider</strong>. This detection request leaves your sharing purpose and recipient notes on the device.</p>
-      <p id="aiScreeningNotice">The browser replaces locally detected credentials with placeholders independently of your image masks. Names, addresses and missed credentials can still be present. This text is not anonymous. Masking does not revoke an exposed credential; rotate or revoke it if it was disclosed.</p>
-      <p>If the provider returns an unknown word ID, the server may send the same screened text once more to correct the result.</p>
-      <details id="aiTextDetails" class="scan-details">
-        <summary>Preview text to be sent</summary>
-        <p>Review the screened text and cancel if anything should stay private.</p>
-        <pre id="aiSendPreview" class="ai-send-preview"></pre>
+    <div class="dialog-top"><span class="eyebrow">OPTIONAL AI DETECTION</span><button id="aiClose" class="icon-button" type="button" aria-label="Close AI detection"><svg aria-hidden="true"><use href="#i-x"/></svg></button></div>
+    <section id="aiReady" class="ai-detection-view">
+      <h2 id="aiHeading" tabindex="-1">Another look at the text.</h2>
+      <p class="ai-detection-copy">AI can find private details that local detection missed. Your image stays on this device.</p>
+      <details id="aiDataDetails" class="scan-details ai-disclosure">
+        <summary>What data will be sent?</summary>
+        <p>Your browser sends screened OCR text, word layout and image dimensions to this site’s server. The server screens the text again and forwards text and word layout to <strong data-ai-provider>the configured AI provider</strong>. This detection request leaves your sharing purpose and recipient notes on the device.</p>
+        <p id="aiScreeningNotice">The browser replaces locally detected credentials with placeholders independently of your image masks. Names, addresses and missed credentials can still be present. This text is not anonymous. Masking does not revoke an exposed credential; rotate or revoke it if it was disclosed.</p>
+        <p>If the provider returns an unknown word ID, the server may send the same screened text once more to correct the result.</p>
+        <details id="aiTextDetails" class="scan-details">
+          <summary>Preview text to be sent</summary>
+          <p>Review the screened text and cancel if anything should stay private.</p>
+          <pre id="aiSendPreview" class="ai-send-preview"></pre>
+        </details>
+        <details id="aiPayloadDetails" class="scan-details">
+          <summary>View exact request with word layout</summary>
+          <pre id="aiPayloadPreview" class="ai-send-preview"></pre>
+        </details>
       </details>
-      <details id="aiPayloadDetails" class="scan-details">
-        <summary>View exact request with word layout</summary>
-        <pre id="aiPayloadPreview" class="ai-send-preview"></pre>
+      <label class="ai-consent"><input id="aiConsent" type="checkbox" disabled><span>I agree to send screened OCR text and word layout to <strong data-ai-provider>the configured AI provider</strong>. Personal details may still be present.</span></label>
+      <p id="aiReadyStatus" class="ai-ready-status" role="status"></p>
+      <button id="retryAIProvider" class="inline-action" type="button" hidden>Retry provider check</button>
+      <button id="detectButton" class="primary-button" type="button" disabled>Analyze text with AI</button>
+      <details id="aiTechnicalDetails" class="scan-details ai-disclosure">
+        <summary>Technical details</summary>
+        <p>Model: gpt-6-luna. Classification references word IDs and uses OCR boxes to locate the text. OCR and AI can miss details. Faces, QR codes and barcodes may need manual masks.</p>
       </details>
-    </details>
-    <label class="ai-consent"><input id="aiConsent" type="checkbox"><span>I agree to send screened OCR text and word layout to <strong data-ai-provider>the configured AI provider</strong>. Personal details may still be present.</span></label>
-    <button id="detectButton" class="primary-button" disabled>Analyze text with AI</button>
-    <button id="cancelAI" class="tool-button" hidden>Cancel analysis</button>
-    <p id="aiDialogStatus" class="ai-status" role="status"></p>
-    <details id="aiTechnicalDetails" class="scan-details ai-disclosure">
-      <summary>Technical details</summary>
-      <p>Model: gpt-6-luna. Classification references word IDs and uses OCR boxes to locate the text. OCR and AI can miss details. Faces, QR codes and barcodes may need manual masks.</p>
-    </details>
+    </section>
+    <section id="aiAnalysis" class="ai-detection-view" hidden>
+      <h2 id="aiAnalysisHeading" tabindex="-1">Finding private details…</h2>
+      <p class="ai-detection-copy">AI is checking for information that local detection may have missed.</p>
+      <div class="ai-analysis-progress" role="progressbar" aria-label="AI text analysis in progress"><span aria-hidden="true"></span></div>
+      <ol id="aiStages" class="ai-analysis-stages" aria-label="Analysis stages">
+        <li data-stage="preparing"><span class="ai-stage-marker" aria-hidden="true"><svg><use href="#i-check"/></svg></span><span>Preparing screened text</span><span class="ai-visually-hidden ai-stage-status"></span></li>
+        <li data-stage="sending"><span class="ai-stage-marker" aria-hidden="true"><svg><use href="#i-check"/></svg></span><span>Sending request to the project server</span><span class="ai-visually-hidden ai-stage-status"></span></li>
+        <li data-stage="waiting"><span class="ai-stage-marker" aria-hidden="true"><svg><use href="#i-check"/></svg></span><span>Waiting for AI results</span><span class="ai-visually-hidden ai-stage-status"></span></li>
+        <li data-stage="validating"><span class="ai-stage-marker" aria-hidden="true"><svg><use href="#i-check"/></svg></span><span>Validating results</span><span class="ai-visually-hidden ai-stage-status"></span></li>
+        <li data-stage="applying"><span class="ai-stage-marker" aria-hidden="true"><svg><use href="#i-check"/></svg></span><span>Applying recommendations</span><span class="ai-visually-hidden ai-stage-status"></span></li>
+      </ol>
+      <p id="aiStageAnnouncement" class="ai-visually-hidden" role="status"></p>
+      <button id="cancelAI" class="tool-button ai-detection-secondary" type="button">Cancel analysis</button>
+    </section>
+    <section id="aiResult" class="ai-detection-view ai-detection-outcome" hidden>
+      <span class="ai-result-icon" aria-hidden="true"><svg><use href="#i-check"/></svg></span>
+      <h2 id="aiResultHeading" tabindex="-1">Analysis complete</h2>
+      <p id="aiResultBadge" class="ai-result-badge"></p>
+      <p id="aiResultMessage" class="ai-detection-copy"></p>
+      <button id="aiResultContinue" class="primary-button" type="button"><span>Continue reviewing</span><svg aria-hidden="true" hidden><use href="#i-arrow"/></svg></button>
+    </section>
+    <section id="aiFailure" class="ai-detection-view ai-detection-outcome" hidden>
+      <span class="ai-result-icon ai-result-icon-warning" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5m0 3V16"/></svg></span>
+      <h2 id="aiFailureHeading" tabindex="-1">Analysis couldn’t be completed</h2>
+      <p id="aiFailureMessage" class="ai-detection-copy"></p>
+      <div class="ai-outcome-actions"><button id="retryAI" class="primary-button" type="button">Try again</button><button id="continueWithoutAI" class="tool-button ai-detection-secondary" type="button">Continue manually</button></div>
+    </section>
   </dialog>
   <dialog id="protectionDialog" class="protection-dialog" aria-labelledby="protectionHeading">
     <div class="dialog-top"><span class="eyebrow">OPTIONAL AI PROTECTION</span><button class="icon-button" data-close="protectionDialog" aria-label="Close sharing analysis"><svg><use href="#i-x"/></svg></button></div>

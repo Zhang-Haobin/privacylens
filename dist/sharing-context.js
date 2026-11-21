@@ -3,8 +3,8 @@ export const audiences = {
   public: { label: 'A public audience', detail: 'Social posts · forums', note: 'Review details that identify you or anyone else before posting.' },
   circle: { label: 'Friends & family', detail: 'Private chats · small groups', note: 'A small group can still forward an image. Review other people’s details too.' },
   team: { label: 'Classmates & colleagues', detail: 'Study groups · work channels', note: 'Review internal messages and project details before sharing.' },
-  support: { label: 'Official support', detail: 'Verify the service channel', note: 'The app cannot verify this recipient. Check the service channel first.' },
-  organization: { label: 'An organization', detail: 'HR · university · authorized team', note: 'Confirm who will receive this copy and which details they require.' }
+  support: { label: 'Official support', detail: 'Seller, carrier, or product support', note: 'Check that you are using the provider’s official support channel.' },
+  organization: { label: 'An organization', detail: 'HR · university · internal team', note: 'Confirm who will receive this copy and which details they require.' }
 };
 // Legacy purposes remain exported for existing integrations and regression checks.
 export const purposes = { share: purposeRegistry.share, advice: purposeRegistry.advice, issue: { label: 'Explain a problem', keep: 'The issue and relevant non-private messages.' }, lookup: purposeRegistry.lookup };
