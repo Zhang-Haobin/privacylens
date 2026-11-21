@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { applyRecommendations, guardSuggestedReveals } from '../dist/sharing-context.js';
-import { reconcileFields, aiInsights } from '../dist/field-state.js';
+import { reconcileFields, aiInsights, activeMasks, coverageSummary } from '../dist/field-state.js';
 
 test('context changes keep previously masked suggestions hidden until explicitly reviewed', () => {
   const fields = [{ id: 'course', category: 'course', name: 'Course', hidden: true }, { id: 'name', category: 'name', hidden: true, userOverride: 'keep' }];
@@ -23,6 +23,34 @@ test('matched rescans preserve pending review and earlier mask boundaries', () =
   assert.equal(result.id, 'old'); assert.equal(result.pendingReveal, true); assert.deepEqual(result.rect, [10,10,80,20]);
 });
 
+test('AI analysis reapplies suggested masks to visible fields and preserves other coverage', () => {
+  const context = { documentType: 'delivery', context: 'support', purpose: 'lookup' };
+  const previous = [
+    { id: 'recipient', category: 'name', anchor: 'Demo Recipient', rect: [8, 9, 84, 22], matchingRect: [10, 10, 80, 20], geometryOverride: true, hidden: false, userOverride: 'keep' },
+    { id: 'order', category: 'order', anchor: 'DEMO-001', rect: [10, 40, 80, 20], hidden: false, userOverride: 'keep' },
+    { id: 'tracking', category: 'tracking', anchor: 'DEMO-002', rect: [10, 70, 80, 20], hidden: true, userOverride: 'redact' },
+    { id: 'other-order', category: 'order', anchor: 'DEMO-003', rect: [10, 100, 80, 20], hidden: true },
+    { id: 'earlier-address', category: 'address', anchor: 'Demo Address', rect: [10, 130, 80, 20], hidden: false, userOverride: 'keep' }
+  ];
+  const incoming = previous.slice(0, 4).map(({ id, category, anchor, rect, matchingRect }) => (
+    { id: `scan-${id}`, category, anchor, rect: matchingRect || rect }
+  ));
+  const { fields } = reconcileFields(previous, incoming);
+  assert.deepEqual(applyRecommendations(fields, context).map(field => field.hidden), [false, false, true, false, false]);
+
+  const applied = guardSuggestedReveals(previous, applyRecommendations(fields, context, { applySuggestedMasks: true }));
+  assert.deepEqual(applied.map(({ id, hidden, userOverride, pendingReveal }) => [id, hidden, userOverride, pendingReveal]), [
+    ['recipient', true, null, false],
+    ['order', false, 'keep', false],
+    ['tracking', true, 'redact', false],
+    ['other-order', true, null, true],
+    ['earlier-address', true, null, false]
+  ]);
+  const manual = [{ id: 1, rect: [110, 20, 40, 40], hidden: true }];
+  assert.deepEqual(activeMasks(applied, manual).map(mask => mask.rect), [previous[0].rect, previous[2].rect, previous[3].rect, previous[4].rect, manual[0].rect]);
+  assert.equal(coverageSummary(applied, manual).hidden, 4);
+});
+
 test('AI insights distinguish prior regions and skip ambiguous mappings', () => {
   const previous = [{ id:'a', category:'email', rect:[0,0,100,20] }];
   const candidates = [{ category:'email', rect:[0,0,100,20] }, { category:'phone', rect:[0,50,100,20] }, { category:'name', rect:[0,90,100,20] }];
@@ -30,8 +58,7 @@ test('AI insights distinguish prior regions and skip ambiguous mappings', () => 
   assert.deepEqual(aiInsights(previous, candidates, current), [{ id:'a', name:'Email', kind:'existing' }, { id:'b', name:'Phone', kind:'new' }]);
 });
 
-test('review counts and exported rectangles share the same active mask selection', async () => {
-  const { activeMasks, coverageSummary } = await import('../dist/field-state.js');
+test('review counts and exported rectangles share the same active mask selection', () => {
   const fields = [
     { id: 'a', rect: [1,2,3,4], hidden: true, recommendation: { action: 'redact' } },
     { id: 'b', rect: [5,6,7,8], hidden: false, userOverride: 'keep', recommendation: { action: 'redact' } },

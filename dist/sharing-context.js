@@ -43,12 +43,14 @@ export function recommendField(field, { documentType = 'general', context = '', 
   };
   return result('redact', reasons[type] || 'This detail may identify someone. Keep it hidden until you review its relevance.');
 }
-export function applyRecommendations(fields, context) {
+export function applyRecommendations(fields, context, { applySuggestedMasks = false } = {}) {
   return fields.map(field => {
     const recommendation = recommendField(field, context);
-    const userOverride = ['redact', 'keep'].includes(field.userOverride) ? field.userOverride : null;
-    const pendingReveal = Boolean(field.pendingReveal && !userOverride && recommendation.action === 'keep');
-    return { ...field, recommendation, userOverride, pendingReveal, hidden: userOverride ? userOverride === 'redact' : pendingReveal || recommendation.action !== 'keep' };
+    const suggestedHidden = recommendation.action !== 'keep';
+    let userOverride = ['redact', 'keep'].includes(field.userOverride) ? field.userOverride : null;
+    if (applySuggestedMasks && suggestedHidden && userOverride === 'keep') userOverride = null;
+    const pendingReveal = Boolean(field.pendingReveal && !userOverride && !suggestedHidden);
+    return { ...field, recommendation, userOverride, pendingReveal, hidden: userOverride ? userOverride === 'redact' : pendingReveal || suggestedHidden };
   });
 }
 export function shouldHide(field, audience, purpose) {

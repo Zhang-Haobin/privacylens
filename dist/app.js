@@ -194,12 +194,12 @@ function updateTypeFromText(document) {
   state.documentType = result.type; state.typeSource = 'local'; state.typeReason = result.reason;
   normalizeContext();
 }
-function receiveFields(incoming) {
+function receiveFields(incoming, options) {
   state.adjusting = null;
   const candidates = incoming.map(field => ({ ...field, id: `scan-${state.nextFieldId++}` }));
   const previous = state.fields;
   const result = reconcileFields(previous, candidates);
-  state.fields = guardSuggestedReveals(previous, applyRecommendations(result.fields, state));
+  state.fields = guardSuggestedReveals(previous, applyRecommendations(result.fields, state, options));
   return result;
 }
 function renderContextOptions() {
@@ -482,7 +482,7 @@ function render() {
   const isSample = state.source === 'sample'; const count = countMasks();
   const plan = currentPlan(); renderContextOptions();
   $('contextFeedback').hidden = !contextUndo; $('contextChanges').textContent = contextFeedback; $('undoContext').disabled = state.detecting;
-  $('aiPrerequisite').textContent = state.ocrDocument?.words.length ? 'Classify names, addresses and other private text from the local scan.' : 'Read text locally first to enable AI classification.';
+  $('aiPrerequisite').textContent = state.ocrDocument?.words.length ? 'After analysis, PrivacyLens applies suggested masks. This can cover details you previously marked visible.' : 'Read text locally first to enable AI classification.';
   $('sampleButton').classList.toggle('selected', isSample);
   $('contextKeep').textContent = plan.keep; $('contextHide').textContent = plan.hide; $('contextNote').textContent = plan.note;
   $('contextSummary').hidden = !state.context || !state.purpose;
@@ -492,7 +492,7 @@ function render() {
   $('pendingRevealSummary').textContent = `${pending.length} suggested ${pending.length === 1 ? 'detail is' : 'details are'} still hidden`;
   $('pendingRevealList').replaceChildren(...pending.map(field => { const li = document.createElement('li'); li.textContent = field.name; return li; }));
   $('applySuggestedReveals').textContent = `Show these ${pending.length} suggested ${pending.length === 1 ? 'detail' : 'details'}`;
-  const assistantText = { idle: 'Find sensitive details that local scanning may miss.', processing: 'Analyzing recognized text…', complete: 'Analysis complete. Review the results below.', failed: 'Analysis failed. Your masks are unchanged.' };
+  const assistantText = { idle: 'Find sensitive details that local scanning may miss.', processing: 'Analyzing recognized text…', complete: 'Suggestions applied. Review the updated preview.', failed: 'Analysis failed. Your masks are unchanged.' };
   $('aiAssistantStatus').textContent = assistantText[state.aiStatus];
   $('aiAssistant').dataset.status = state.aiStatus;
   $('aiButton').textContent = state.aiStatus === 'failed' ? 'Try again' : state.aiStatus === 'complete' ? 'Run again' : '✦ Enhance detection with AI';
@@ -704,6 +704,9 @@ $('zoomOutButton').addEventListener('click', () => setZoom((state.zoom ?? curren
 $('cancelDetectionButton').addEventListener('click', stopScanning);
 $('cancelScan').addEventListener('click', stopScanning);
 $('cancelAI').addEventListener('click', () => { stopScanning(); $('aiDialog').close(); });
+$('aiDialog').addEventListener('close', () => {
+  if (state.phase === 'ai' && state.aiStatus === 'processing') stopScanning();
+});
 $('ocrLanguage').addEventListener('change', () => {
   clearContextChange();
   textLines = [];
@@ -750,18 +753,20 @@ $('detectButton').addEventListener('click', async () => {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), signal: controller.signal
     }));
     if (currentId !== detectionId || loadId !== state.loadId || controller.signal.aborted) return;
+    if (!$('aiDialog').open) { stopScanning(); return; }
     const classified = validateClassifications(result.fields, document);
     const aiFields = suggestionsToFields(classified, document);
     const fields = suggestionsToFields([...classified, ...localSuggestions(document)], document);
     const previousFields = state.fields;
     // Build everything first: an invalid result cannot partially replace existing masks.
     clearContextChange();
-    const reconciled = receiveFields(fields);
+    const reconciled = receiveFields(fields, { applySuggestedMasks: true });
     state.aiInsights = aiInsights(previousFields, aiFields, state.fields); state.aiTypeSuggestion = suggestTypeFromAI(classified); state.aiStatus = 'complete';
     state.aiDetected = true; state.detectedModel = result.model; state.view = 'protected'; state.highlighted = null;
-    setAIStatus(`${fields.length} OCR-positioned mask suggestions, with text classification from ${result.provider}. ${reconciled.restored} user choices matched; ${reconciled.retained} earlier regions retained for review. Check missed text, QR codes and barcodes.`);
+    const { hidden, detected } = coverageSummary(state.fields, state.manual);
+    setAIStatus(`${hidden} of ${detected} detected details hidden after classification by ${result.provider}. ${reconciled.retained} earlier regions retained for review. Check missed text, QR codes and barcodes.`);
     $('aiDialog').close();
-    announce('AI suggestions ready. Review the whole image.');
+    announce(`${hidden} of ${detected} detected details hidden after AI review. Check the whole image.`);
   } catch (error) {
     if (currentId === detectionId && loadId === state.loadId) { state.aiStatus = 'failed'; setAIStatus(error.name === 'AbortError' ? 'Detection timed out. Existing masks retained; retry or add masks manually.' : error.message, true); }
   } finally {
