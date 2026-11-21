@@ -40,6 +40,7 @@ function motionEnabled() { return motionOverride ?? !reducedMotion.matches; }
 let previewLoadId = -1;
 const base = document.createElement('canvas');
 const b = base.getContext('2d');
+const audienceIcons = { public: 'globe', circle: 'people', team: 'cap', support: 'support', organization: 'work' };
 const state = {
   flow: 'landing', hasImage: false, reviewExpanded: false, expandedField: null,
   context: '', purpose: '', documentType: 'delivery', typeSource: 'sample', typeReason: '',
@@ -270,6 +271,7 @@ function typePending() {
   return state.typeSource === 'pending' && ['idle', 'running'].includes(state.ocrStatus);
 }
 function contextReviewBlocker(choice = resolveSharingChoice(state)) {
+  if (!state.context && !choice.purpose) return 'Choose an audience and a purpose to continue.';
   if (!state.context) return 'Choose who will receive this image.';
   if (!choice.purpose) return 'Choose a common purpose or describe your own.';
   if (!choice.compatible && !state.acceptedConflict && !typePending()) return 'Resolve the sharing choices above to continue.';
@@ -283,10 +285,30 @@ function renderContextOptions() {
   if (audienceOptions !== audienceKey) {
     audienceOptions = audienceKey;
     $('sharingAudiences').replaceChildren(...audienceKeys.map(key => {
-      const button = document.createElement('button'); button.type = 'button'; button.className = 'sharing-profile'; button.dataset.audience = key;
-      const content = document.createElement('span'), title = document.createElement('strong'), detail = document.createElement('small'), dot = document.createElement('span');
-      title.textContent = audiences[key].label; detail.textContent = audiences[key].detail;
-      dot.className = 'radio-dot'; dot.setAttribute('aria-hidden', 'true'); content.append(title, detail); button.append(content, dot);
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'sharing-profile';
+      button.dataset.audience = key;
+
+      const icon = document.createElement('span');
+      icon.className = 'sharing-profile-icon';
+      icon.setAttribute('aria-hidden', 'true');
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      const use = document.createElementNS(svg.namespaceURI, 'use');
+      use.setAttribute('href', `#i-${audienceIcons[key]}`);
+      svg.append(use);
+      icon.append(svg);
+
+      const content = document.createElement('span');
+      const title = document.createElement('strong');
+      const detail = document.createElement('small');
+      title.textContent = audiences[key].label;
+      detail.textContent = audiences[key].detail;
+      content.append(title, detail);
+      const dot = document.createElement('span');
+      dot.className = 'radio-dot';
+      dot.setAttribute('aria-hidden', 'true');
+      button.append(icon, content, dot);
       return button;
     }));
   }
@@ -310,7 +332,10 @@ function renderContextOptions() {
   $('useLocalType').hidden = state.typeSource !== 'manual'; $('useLocalType').disabled = !state.ocrDocument;
   const typePrefix = { manual: 'Selected', local: 'Suggested', sample: 'Example', pending: 'Current type' }[state.typeSource];
   $('detectedType').textContent = `${typePrefix}: ${config.label}`;
-  if ($('customPurpose').value !== state.customPurpose) $('customPurpose').value = state.customPurpose;
+  const description = $('customPurpose');
+  if (description.value !== state.customPurpose) description.value = state.customPurpose;
+  description.placeholder = state.context === 'support' && state.documentType === 'delivery'
+    ? 'e.g. Help me locate my delayed package.' : 'Describe what you need to share…';
   $('recipientDetail').value = state.recipientDetail;
 
   const conflict = !choice.compatible && !typePending();
@@ -1178,7 +1203,10 @@ function renderFlow() {
 function openContextDialog() {
   if (!state.hasImage) return;
   state.flow = 'context'; render();
-  if (!$('contextDialog').open) $('contextDialog').showModal();
+  if (!$('contextDialog').open) {
+    $('contextDialog').showModal();
+    $('contextHeading').focus({ preventScroll: true });
+  }
 }
 function closeWorkDialogs() {
   for (const id of ['contextDialog', 'moreDialog', 'aiDialog', 'protectionDialog', 'protectionChoiceDialog', 'reapplyDialog', 'exportDialog', 'aboutDialog']) {

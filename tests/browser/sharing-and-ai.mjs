@@ -151,12 +151,14 @@ test('Sharing Settings and all AI Detection states in a real browser', { timeout
   const home = 'http://127.0.0.1:' + server.address().port + '/#upload';
   const page = await openChrome(t);
   const { command, run, visible, text, disabled, waitVisible, click, change, screenshot } = page;
+  await command('Emulation.setFocusEmulationEnabled', { enabled: true });
   await command('Emulation.setDeviceMetricsOverride', { width: 1280, height: 800, deviceScaleFactor: 1, mobile: false });
 
   async function startDelivery() {
     await command('Page.navigate', { url: home });
     await click(delivery);
     await waitVisible('#contextDialog[open]');
+    assert.equal(await run(() => document.activeElement.id), 'contextHeading');
   }
   async function openDetection() {
     await click('#aiButton');
@@ -185,9 +187,10 @@ test('Sharing Settings and all AI Detection states in a real browser', { timeout
       await startDelivery();
       assert.equal(await visible('.context-brand .brand-mark'), true);
       assert.equal(await run(() => document.querySelectorAll('#sharingAudiences button').length), 4);
+      assert.equal(await run(() => document.querySelectorAll('#sharingAudiences .sharing-profile-icon use').length), 4);
       assert.equal(await visible('[data-audience="support"]'), true);
       assert.equal(await visible('[data-audience="organization"]'), false);
-      assert.equal(await text('#reviewImageStatus'), 'Choose who will receive this image.');
+      assert.equal(await text('#reviewImageStatus'), 'Choose an audience and a purpose to continue.');
       await click('[data-audience="support"]');
       assert.equal(await disabled('#continueContext'), true);
       assert.match(await text('#reviewImageStatus'), /describe your own/);
@@ -195,7 +198,7 @@ test('Sharing Settings and all AI Detection states in a real browser', { timeout
       assert.match(await text('#purposeMode'), /Local rules use this purpose/);
       await change('#customPurpose', lookupPurpose);
       assert.match(await text('#purposeMode'), /Delivery lookup/);
-    assert.equal(await text('#commonPurposeLabel'), 'Purpose if custom is cleared');
+      assert.equal(await text('#commonPurposeLabel'), 'Purpose if custom is cleared');
       assert.equal(await disabled('#continueContext'), false);
       await click('#continueContext');
       assert.equal(await disabled('#continueContext'), true);
@@ -227,6 +230,15 @@ test('Sharing Settings and all AI Detection states in a real browser', { timeout
 
   await t.test('consent, actual progress, masks, new findings and repeat detection', async () => {
     await startDelivery();
+    await until(async () => (await text('#detectedType')).startsWith('Suggested'), 'Sharing Settings OCR did not finish');
+    const focus = await run(() => {
+      const field = document.querySelector('#customPurpose');
+      field.focus();
+      const style = getComputedStyle(field);
+      return { active: document.activeElement.id, focused: field.matches(':focus'), outline: style.outlineWidth, offset: style.outlineOffset };
+    });
+    await screenshot('sharing-settings-empty');
+    assert.deepEqual(focus, { active: 'customPurpose', focused: true, outline: '2px', offset: '0px' });
     await click('[data-audience="support"]');
     await change('#customPurpose', lookupPurpose);
     await click('#skipContext');
@@ -366,6 +378,9 @@ test('Sharing Settings and all AI Detection states in a real browser', { timeout
     }, selector);
     assert.equal(await fits('#contextDialog'), true);
     assert.equal(await fits('#continueContext'), true);
+    assert.equal(await run(() =>
+      document.querySelector('#contextExplanation summary').getBoundingClientRect().bottom <=
+      document.querySelector('.context-body').getBoundingClientRect().bottom), true);
     await screenshot('sharing-settings-mobile');
     await click('#continueContext');
     if (!await run(() => document.querySelector('#reviewToggle').getAttribute('aria-expanded') === 'true')) await click('#reviewToggle');
