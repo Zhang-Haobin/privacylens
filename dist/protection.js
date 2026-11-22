@@ -23,7 +23,7 @@ function hasKeys(value, keys) {
 
 function supportedContext(documentType, audience) {
   return typeof documentType === 'string' && Object.hasOwn(documentTypes, documentType)
-    && documentTypes[documentType].audiences.includes(audience);
+    && (audience === 'unspecified' || documentTypes[documentType].audiences.includes(audience));
 }
 
 export const protectionResponseFormat = {
@@ -86,18 +86,22 @@ export function validateProtectionRequest(body) {
   return { documentType: body.documentType, audience: body.audience, purpose: body.purpose, fields };
 }
 
-export function createProtectionInput({ documentType, context, customPurpose }, fields) {
+export function screenSharedDescription(text, fields) {
   const anchors = new Set(fields.map(field => field.anchor?.normalize('NFKC').trim()).filter(value => value?.length >= 2));
-  let description = customPurpose.normalize('NFKC');
+  let description = text.normalize('NFKC');
   for (const anchor of [...anchors].sort((a, b) => b.length - a.length)) {
     const literal = anchor.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     description = description.replace(new RegExp(`(?<![\\p{L}\\p{N}])${literal}(?![\\p{L}\\p{N}])`, 'giu'), '[detail removed]');
   }
+  return screenPurpose(description);
+}
+
+export function createProtectionInput({ documentType, context, customPurpose }, fields) {
   const body = {
     consent: true,
     documentType,
     audience: context,
-    purpose: screenPurpose(description),
+    purpose: screenSharedDescription(customPurpose, fields),
     fields: fields.map((field, index) => ({ id: `f${index + 1}`, category: field.category }))
   };
   validateProtectionRequest(body);
@@ -130,6 +134,9 @@ export function safeProtectionRecommendation(field, { documentType, audience }, 
   }
   if (field.retained && decision.action !== 'hide') {
     return { source, action: 'review', reason: 'Check the location of this earlier field manually.', canReveal: false };
+  }
+  if (audience === 'unspecified' && decision.action !== 'hide') {
+    return { source, action: 'review', reason: 'Check who will receive this detail and whether they need it.', canReveal: false };
   }
   return {
     source, action: decision.action, reason: reasons[decision.reason_code],

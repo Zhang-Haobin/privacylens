@@ -5,12 +5,13 @@ import { createMaskAnimator } from './mask-motion.js';
 import { maskTargetAtPoint, textLineTargets } from './mask-targets.js';
 import { localSuggestions, suggestionsToFields, textPayload, validateClassifications } from './ocr-core.js';
 import { audiences, applyRecommendations, recommendField, sharingPlan, contextDifference, guardSuggestedReveals } from './sharing-context.js';
-import { documentTypes, purposesFor, purposeRegistry, classifyDocument, suggestTypeFromAI } from './document-context.js';
+import { documentTypes, purposeRegistry, classifyDocument, suggestTypeFromAI } from './document-context.js';
 import { reconcileFields, preserveEditedRegions, aiInsights, activeMasks, coverageSummary } from './field-state.js';
 import { drawExtraSample } from './samples.js';
 import { fitImageScale, workspaceLayout } from './editor-geometry.js';
-import { resolveSharingChoice } from './workflow.js';
+import { editorSharingChoice } from './workflow.js';
 import { createProtectionInput, protectionLimits, protectionMaskChange, safeProtectionRecommendation, sameProtectionVersion, validateProtectionDecisions } from './protection.js';
+import { createInstructionRequest, instructionFieldCategories, instructionLimit, instructionOperationLabel, instructionRectangles, parsePrivacyInstruction, validKeepArea, validateInstructionOperations } from './privacy-instruction.js';
 import { categoryNames } from './privacy-types.js';
 import { adjustMaskRect } from './mask-geometry.js';
 import { createIntroDemo, initialEntry, rememberIntro } from './intro.js';
@@ -40,11 +41,11 @@ function motionEnabled() { return motionOverride ?? !reducedMotion.matches; }
 let previewLoadId = -1;
 const base = document.createElement('canvas');
 const b = base.getContext('2d');
-const audienceIcons = { public: 'globe', circle: 'people', team: 'cap', support: 'support', organization: 'work' };
+const audienceIcons = { public: 'globe', circle: 'people', team: 'cap', support: 'support' };
 const state = {
   flow: 'landing', hasImage: false, reviewExpanded: false, expandedField: null,
-  context: '', purpose: '', documentType: 'delivery', typeSource: 'sample', typeReason: '',
-  customPurpose: '', confirmedPurpose: '', acceptedConflict: false, recipientDetail: '',
+  context: '', documentType: 'delivery', typeSource: 'sample', typeReason: '',
+  customInstruction: '', instruction: null, acceptedConflict: false, recipientDetail: '',
   source: 'sample', sampleKind: 'delivery', filename: 'fictional-order.png', loadId: 0,
   fields: [], manual: [], nextId: 1, nextFieldId: 1, view: 'protected', drawing: false, drag: null, adjusting: null,
   detecting: false, phase: '', ocrStatus: 'idle', ocrDocument: null, waitingForOCR: false,
@@ -52,15 +53,15 @@ const state = {
   exporting: false, zoom: null, fitMode: 'auto', panning: false, reviewWidth: 380, highlighted: null
 };
 let hoveredField = null;
-let audienceOptions = '';
-let purposeOptions = '';
 let contextUndo = null;
 let contextFeedback = '';
 let sharingVersion = 0;
 let fieldsVersion = 0;
 let loadingImageId = null;
 let aiPreview = null;
-const purposeReview = { preview: null, request: null, result: null, change: null, message: '' };
+let instructionRects = [];
+let keepAreaDraft = null;
+const sharingAI = { preview: null, request: null, result: null, interpretation: null, change: null, message: '' };
 // Only the intro preference is persisted. Images and editing choices stay in memory.
 let entryStorage;
 try { entryStorage = window.localStorage; } catch { /* Private browsing can deny access. */ }
@@ -145,15 +146,59 @@ function resetFields(clearOverrides = false) {
   if (clearOverrides) state.fields = guardSuggestedReveals(previous, state.fields);
 }
 function protectionContext() {
-  return { documentType: state.documentType, context: state.context, purpose: resolveSharingChoice(state).purpose };
+  const choice = editorSharingChoice(state.documentType, state.context);
+  const instruction = currentInstruction();
+  return { ...choice, maskCategories: instruction?.enabled ? instructionFieldCategories(instruction.operation) : null };
 }
 function currentPlan() {
-  const choice = resolveSharingChoice(state);
-  const plan = sharingPlan(state.context, choice.purpose, state.documentType);
+  const choice = protectionContext();
+  const plan = sharingPlan(choice.context, choice.purpose, state.documentType);
   if (!choice.compatible) plan.keep = 'Review the details needed for this copy. This combination uses conservative protection.';
-  if (choice.custom && choice.purpose !== 'custom') plan.label += ' · confirmed from custom purpose';
-  plan.label = `${documentTypes[state.documentType].label} · ${plan.label}`;
+  if (choice.custom) {
+    plan.keep = 'Check your custom instruction against the protected preview.';
+  }
+  plan.note = audiences[choice.context]?.note || '';
+  plan.label = `${documentTypes[state.documentType].label} · ${choice.custom ? 'Custom' : audiences[choice.context]?.label || 'Audience not selected'}`;
   return plan;
+}
+function currentInstruction() {
+  return state.context === 'custom' && state.instruction?.loadId === state.loadId ? state.instruction : null;
+}
+function applyInstruction(instruction) {
+  const previous = state.fields;
+  state.instruction = instruction;
+  state.view = 'protected';
+  sharingVersion++;
+  invalidateProtection();
+  resetFields();
+  state.fields = guardSuggestedReveals(previous, state.fields);
+}
+function commitInstruction() {
+  const text = state.customInstruction.trim();
+  if (state.context !== 'custom' || !text) return;
+  const previous = currentInstruction();
+  if (previous?.text === text) {
+    if (!previous.enabled) applyInstruction({ ...previous, enabled: true });
+    return;
+  }
+  applyInstruction({ text, loadId: state.loadId, operation: parsePrivacyInstruction(text), enabled: true, source: 'local' });
+}
+function updateInstructionRectangles() {
+  const instruction = currentInstruction();
+  const operation = instruction?.enabled ? instruction.operation : null;
+  const document = state.ocrDocument;
+  const input = { width: base.width, height: base.height, document, keepArea: instruction?.keepArea };
+  if (operation && ['mask_text', 'mask_numbers'].includes(operation.type)) {
+    // Keep same-image coverage through later scans, including failed ones.
+    instruction.textCoverage ??= new Map();
+    if (instruction.ocrDocument !== document) {
+      for (const rect of instructionRectangles(operation, input)) instruction.textCoverage.set(rect.join(','), rect);
+      instruction.ocrDocument = document;
+    }
+    instructionRects = [...instruction.textCoverage.values()];
+  } else {
+    instructionRects = instructionRectangles(operation, input);
+  }
 }
 function setFieldChoice(field, hidden) {
   clearContextChange(); field.userOverride = hidden ? 'redact' : 'keep'; field.pendingReveal = false; field.hidden = hidden;
@@ -173,7 +218,7 @@ function clearDetection() {
   setAIStatus('Ready for local text recognition. AI assistance is optional.');
 }
 function clearSharingChoices() {
-  state.context = ''; state.purpose = ''; state.customPurpose = ''; state.confirmedPurpose = '';
+  state.context = ''; state.customInstruction = ''; state.instruction = null;
   state.acceptedConflict = false; state.recipientDetail = ''; sharingVersion++;
 }
 function setSample(kind = state.sampleKind) {
@@ -189,47 +234,33 @@ function setSample(kind = state.sampleKind) {
   resetFields(); render(); setAIStatus('Fictional example with pre-labelled regions. Scan locally to test OCR; AI is optional.');
 }
 function clearContextChange() { contextUndo = null; contextFeedback = ''; }
-const sharingKeys = ['context', 'purpose', 'customPurpose', 'confirmedPurpose', 'acceptedConflict', 'documentType', 'typeSource', 'typeReason'];
+const sharingKeys = ['context', 'instruction', 'acceptedConflict', 'documentType', 'typeSource', 'typeReason'];
 
-function setContext(changes, { typing = false } = {}) {
+function setContext(changes) {
   if (Object.entries(changes).every(([key, value]) => state[key] === value)) return;
-  const before = protectionContext();
   const previousFields = state.fields;
   const previous = Object.fromEntries(sharingKeys.map(key => [key, state[key]]));
   Object.assign(state, changes);
-  if (previous.context !== state.context || previous.documentType !== state.documentType || previous.customPurpose !== state.customPurpose) {
-    state.confirmedPurpose = '';
-  }
+  if (state.context !== 'custom') state.instruction = null;
   state.acceptedConflict = false;
   state.waitingForOCR = false;
   sharingVersion++;
   invalidateProtection();
 
-  const after = protectionContext();
-  if (typing && before.purpose === after.purpose) {
-    clearContextChange();
-    renderContextOptions();
-    return;
-  }
-
   state.drag = null; state.view = 'protected';
   resetFields();
   state.fields = guardSuggestedReveals(previousFields, state.fields);
-  if (typing) {
-    clearContextChange();
-  } else {
-    const changes = contextDifference(previousFields, state.fields);
-    const names = values => values.length > 3 ? `${values.slice(0, 3).join(', ')} and ${values.length - 3} more` : values.join(', ');
-    contextFeedback = [changes.hidden.length ? `Newly masked: ${names(changes.hidden)}.` : '', changes.visible.length ? `Now visible: ${names(changes.visible)}.` : ''].filter(Boolean).join(' ') || 'Sharing settings updated. Review your field choices.';
-    const pending = state.fields.filter(field => field.pendingReveal).length;
-    if (pending) contextFeedback += ` ${pending} suggested ${pending === 1 ? 'detail remains' : 'details remain'} hidden until you review them.`;
-    const overrides = state.fields.filter(field => field.userOverride).length;
-    if (overrides) contextFeedback += ` ${overrides} ${overrides === 1 ? 'field follows your choice' : 'fields follow your choices'}.`;
-    contextUndo = {
-      choices: previous, loadId: state.loadId,
-      fields: previousFields.map(({ id, userOverride, pendingReveal }) => ({ id, userOverride, pendingReveal }))
-    };
-  }
+  const difference = contextDifference(previousFields, state.fields);
+  const names = values => values.length > 3 ? `${values.slice(0, 3).join(', ')} and ${values.length - 3} more` : values.join(', ');
+  contextFeedback = [difference.hidden.length ? `Newly masked: ${names(difference.hidden)}.` : '', difference.visible.length ? `Now visible: ${names(difference.visible)}.` : ''].filter(Boolean).join(' ') || 'Sharing settings updated. Review your field choices.';
+  const pending = state.fields.filter(field => field.pendingReveal).length;
+  if (pending) contextFeedback += ` ${pending} suggested ${pending === 1 ? 'detail remains' : 'details remain'} hidden until you review them.`;
+  const overrides = state.fields.filter(field => field.userOverride).length;
+  if (overrides) contextFeedback += ` ${overrides} ${overrides === 1 ? 'field follows your choice' : 'fields follow your choices'}.`;
+  contextUndo = {
+    choices: previous, loadId: state.loadId,
+    fields: previousFields.map(({ id, userOverride, pendingReveal }) => ({ id, userOverride, pendingReveal }))
+  };
   render();
 }
 function undoSharingSettings() {
@@ -243,7 +274,7 @@ function undoSharingSettings() {
     if (prior) { field.userOverride = prior.userOverride; field.pendingReveal = prior.pendingReveal; }
   });
   state.view = 'protected'; resetFields(); clearContextChange(); render();
-  $($('contextDialog').open ? 'sharingPurpose' : 'contextButton').focus({ preventScroll: true });
+  $($('contextDialog').open ? 'contextHeading' : 'contextButton').focus({ preventScroll: true });
   announce('Previous sharing settings and field choices restored.');
 }
 $('undoContext').addEventListener('click', undoSharingSettings);
@@ -252,7 +283,7 @@ function updateTypeFromText(document) {
   if (state.typeSource === 'manual') return;
   const result = classifyDocument(document);
   if (state.documentType !== result.type) {
-    state.confirmedPurpose = ''; state.acceptedConflict = false; sharingVersion++;
+    state.acceptedConflict = false; sharingVersion++;
   }
   state.documentType = result.type; state.typeSource = 'local'; state.typeReason = result.reason;
 }
@@ -270,98 +301,74 @@ function receiveFields(incoming) {
 function typePending() {
   return state.typeSource === 'pending' && ['idle', 'running'].includes(state.ocrStatus);
 }
-function contextReviewBlocker(choice = resolveSharingChoice(state)) {
-  if (!state.context && !choice.purpose) return 'Choose an audience and a purpose to continue.';
-  if (!state.context) return 'Choose who will receive this image.';
-  if (!choice.purpose) return 'Choose a common purpose or describe your own.';
+function contextReviewBlocker(choice = protectionContext()) {
+  if (!state.context) return 'Choose a sharing option to continue.';
+  if (choice.custom && !state.customInstruction.trim()) return 'Enter a privacy instruction to continue.';
   if (!choice.compatible && !state.acceptedConflict && !typePending()) return 'Resolve the sharing choices above to continue.';
   return '';
 }
+function buildSharingCards() {
+  for (const [key, symbol] of Object.entries(audienceIcons)) {
+    const label = document.createElement('label');
+    label.className = 'sharing-profile';
+    label.dataset.audience = key;
+    const radio = document.createElement('input');
+    radio.type = 'radio';
+    radio.name = 'sharing-mode';
+    radio.value = key;
+    radio.setAttribute('aria-labelledby', `audience-${key}-title`);
+    radio.setAttribute('aria-describedby', `audience-${key}-detail`);
+
+    const icon = document.createElement('span');
+    icon.className = 'sharing-profile-icon';
+    icon.setAttribute('aria-hidden', 'true');
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    const use = document.createElementNS(svg.namespaceURI, 'use');
+    use.setAttribute('href', `#i-${symbol}`);
+    svg.append(use);
+    icon.append(svg);
+
+    const content = document.createElement('span');
+    const title = document.createElement('strong');
+    const detail = document.createElement('small');
+    title.id = `audience-${key}-title`;
+    detail.id = `audience-${key}-detail`;
+    title.textContent = audiences[key].label;
+    detail.textContent = audiences[key].detail;
+    content.append(title, detail);
+    const dot = document.createElement('span');
+    dot.className = 'radio-dot';
+    dot.setAttribute('aria-hidden', 'true');
+    label.append(radio, icon, content, dot);
+    $('customSharing').before(label);
+  }
+}
 function renderContextOptions() {
   const config = documentTypes[state.documentType];
-  const choice = resolveSharingChoice(state);
-  const audienceKeys = [...new Set([...(state.typeSource === 'pending' ? Object.keys(audiences) : config.audiences), state.context].filter(Boolean))];
-  const audienceKey = audienceKeys.join(',');
-  if (audienceOptions !== audienceKey) {
-    audienceOptions = audienceKey;
-    $('sharingAudiences').replaceChildren(...audienceKeys.map(key => {
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'sharing-profile';
-      button.dataset.audience = key;
+  const choice = protectionContext();
+  for (const radio of $('sharingAudiences').querySelectorAll('input')) radio.checked = radio.value === state.context;
+  $('customInstructionPanel').hidden = !choice.custom;
+  const description = $('customInstruction');
+  if (description.value !== state.customInstruction) description.value = state.customInstruction;
+  $('instructionCount').textContent = `${state.customInstruction.length} / ${description.maxLength}`;
+  const type = choice.custom ? parsePrivacyInstruction(state.customInstruction)?.type : null;
+  const exampleHint = type === 'draw_area' ? 'In Review, draw a mask around the area you want to hide.'
+    : type === 'keep_area' ? 'In Review, select and confirm the area you want to keep.' : '';
+  $('instructionExampleHint').hidden = !exampleHint;
+  if ($('instructionExampleHint').textContent !== exampleHint) $('instructionExampleHint').textContent = exampleHint;
+  $('contextExplanation').hidden = !state.context || choice.custom;
 
-      const icon = document.createElement('span');
-      icon.className = 'sharing-profile-icon';
-      icon.setAttribute('aria-hidden', 'true');
-      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-      const use = document.createElementNS(svg.namespaceURI, 'use');
-      use.setAttribute('href', `#i-${audienceIcons[key]}`);
-      svg.append(use);
-      icon.append(svg);
-
-      const content = document.createElement('span');
-      const title = document.createElement('strong');
-      const detail = document.createElement('small');
-      title.textContent = audiences[key].label;
-      detail.textContent = audiences[key].detail;
-      content.append(title, detail);
-      const dot = document.createElement('span');
-      dot.className = 'radio-dot';
-      dot.setAttribute('aria-hidden', 'true');
-      button.append(icon, content, dot);
-      return button;
-    }));
-  }
-  for (const button of $('sharingAudiences').children) {
-    const selected = button.dataset.audience === state.context;
-    button.classList.toggle('selected', selected); button.setAttribute('aria-pressed', String(selected));
-  }
-  $('organizationHint').hidden = state.context !== 'organization' || state.documentType !== 'general' || state.typeSource === 'pending';
-
-  const presetKeys = state.typeSource === 'pending' ? Object.keys(purposeRegistry) : purposesFor(state.documentType);
-  const options = ['', ...new Set([...presetKeys, state.purpose].filter(key => key && key !== 'custom'))];
-  const purposeKey = options.join(',');
-  if (purposeOptions !== purposeKey) {
-    purposeOptions = purposeKey;
-    $('sharingPurpose').replaceChildren(...options.map(key => new Option(key ? purposeRegistry[key].label : 'Choose a purpose…', key)));
-  }
-  $('sharingPurpose').value = state.purpose;
-  $('commonPurposeLabel').textContent = choice.custom && state.purpose ? 'Purpose if custom is cleared' : 'Choose a common purpose';
   $('documentType').value = state.documentType;
   $('typeEvidence').textContent = state.typeReason;
   $('useLocalType').hidden = state.typeSource !== 'manual'; $('useLocalType').disabled = !state.ocrDocument;
   const typePrefix = { manual: 'Selected', local: 'Suggested', sample: 'Example', pending: 'Current type' }[state.typeSource];
-  $('detectedType').textContent = `${typePrefix}: ${config.label}`;
-  const description = $('customPurpose');
-  if (description.value !== state.customPurpose) description.value = state.customPurpose;
-  description.placeholder = state.context === 'support' && state.documentType === 'delivery'
-    ? 'e.g. Help me locate my delayed package.' : 'Describe what you need to share…';
+  $('detectedType').textContent = typePending() ? 'Checking document type…' : `${typePrefix}: ${config.label}`;
   $('recipientDetail').value = state.recipientDetail;
 
   const conflict = !choice.compatible && !typePending();
   const unresolvedConflict = conflict && !state.acceptedConflict;
-  const suggested = choice.match?.purpose;
-  const matchLabel = suggested === 'lookup' ? 'Delivery lookup' : purposeRegistry[suggested]?.label;
-  const confirmed = choice.custom && choice.purpose !== 'custom';
-  let message = '';
-  if (choice.custom) {
-    if (confirmed) message = `Custom purpose confirmed. Local rules use ${matchLabel}.`;
-    else if (suggested) message = `Suggested purpose · ${matchLabel}. Conservative protection applies until confirmed.`;
-    else if (choice.match.status === 'ambiguous') message = 'The description could fit several purposes. Start with conservative protection or clarify what you need.';
-    else message = 'Custom purpose entered. PrivacyLens will start with conservative protection.';
-  } else if (choice.purpose) {
-    if (!conflict) message = 'Local rules use this purpose to suggest what to hide.';
-    else if (state.acceptedConflict) message = 'Conservative protection is active for these sharing settings.';
-  }
-  if ($('purposeMode').textContent !== message) $('purposeMode').textContent = message;
-  $('purposeMode').parentElement.hidden = !message;
-  $('confirmPurpose').hidden = !suggested || confirmed;
-  if (matchLabel) $('confirmPurpose').setAttribute('aria-label', `Confirm suggested purpose, ${matchLabel}`);
-
   $('contextConflict').hidden = !unresolvedConflict;
-  $('contextConflictMessage').textContent = state.context === 'organization' && state.documentType === 'delivery'
-    ? 'Choose Official support for a seller or carrier. Keeping your current choices uses conservative protection.'
-    : 'Choose an audience and purpose supported by this document type, or keep your choices with conservative protection.';
+  $('contextConflictMessage').textContent = 'Choose another sharing option, correct the document type, or continue with conservative protection.';
   const blocker = contextReviewBlocker(choice);
   $('continueContext').disabled = Boolean(blocker || state.waitingForOCR);
   const reviewStatus = state.waitingForOCR ? 'Finishing screenshot analysis…' : blocker;
@@ -390,12 +397,15 @@ function renderChooseProgress() {
   $('retryChooseOCR').hidden = running || !message;
   if (message && $('chooseProgressMessage').textContent !== message) $('chooseProgressMessage').textContent = message;
 }
-function drawImage(target, includeMasks = true) {
-  target.width = base.width; target.height = base.height;
-  const c = target.getContext('2d'); c.fillStyle = '#fff'; c.fillRect(0, 0, target.width, target.height); c.drawImage(base, 0, 0);
+function drawImage(target, includeMasks = true, rectangles = instructionRects, previewSize = Infinity) {
+  const scale = Math.min(1, previewSize / Math.max(base.width, base.height));
+  target.width = Math.max(1, Math.round(base.width * scale)); target.height = Math.max(1, Math.round(base.height * scale));
+  const c = target.getContext('2d');
+  c.scale(target.width / base.width, target.height / base.height);
+  c.fillStyle = '#fff'; c.fillRect(0, 0, base.width, base.height); c.drawImage(base, 0, 0);
   if (includeMasks) {
     c.fillStyle = '#202b24';
-    activeMasks(state.fields, state.manual).forEach(({ rect }) => c.fillRect(...rect));
+    activeMasks(state.fields, state.manual, rectangles).forEach(({ rect }) => c.fillRect(...rect));
   }
 }
 function transitionMask(record, visible, animate) {
@@ -415,12 +425,13 @@ function renderMaskLayer() {
   const animate = !newImage && !maskLayer.hidden && motionEnabled();
   $('motionButton').textContent = motionEnabled() ? 'Animation on' : 'Animation off';
   $('motionButton').setAttribute('aria-pressed', String(motionEnabled()));
-  const masks = activeMasks(state.fields, state.manual);
+  const masks = activeMasks(state.fields, state.manual, instructionRects);
   const active = new Set(masks.map(mask => mask.key));
   masks.forEach(({ key, rect: [x, y, width, height] }, index) => {
     let record = previewMasks.get(key);
     if (!record) {
       const element = document.createElement('div'); element.className = 'preview-mask';
+      if (key.startsWith('instruction-')) element.dataset.maskKind = 'instruction';
       element.style.clipPath = 'inset(0 100% 0 0)'; maskLayer.append(element);
       record = { key, element, visible: false, progress: 0, motion: null }; previewMasks.set(key, record);
     }
@@ -505,7 +516,9 @@ function renderCanvas() {
     if (field) { ctx.strokeStyle = '#e7b71e'; ctx.lineWidth = Math.max(3, base.width / 220); ctx.strokeRect(...field.rect); }
   }
   if (state.drag) {
-    const r = dragRect(); ctx.fillStyle = '#202b24'; ctx.fillRect(...r); ctx.strokeStyle = '#c6db7a'; ctx.lineWidth = Math.max(2, base.width / 350); ctx.strokeRect(...r);
+    const rect = dragRect();
+    if (state.drawing !== 'keep') { ctx.fillStyle = '#202b24'; ctx.fillRect(...rect); }
+    ctx.strokeStyle = '#c6db7a'; ctx.lineWidth = Math.max(2, base.width / 350); ctx.strokeRect(...rect);
   }
 }
 function adjustedMask() {
@@ -537,7 +550,7 @@ function setAdjusting(type, id) {
     adjustLayer.querySelector('.mask-handle-move')?.focus({ preventScroll: true });
   }
 }
-function countMasks() { return activeMasks(state.fields, state.manual).length; }
+function countMasks() { return activeMasks(state.fields, state.manual, instructionRects).length; }
 function reapplyCandidates() {
   return state.fields.filter(field => field.userOverride === 'keep' && field.recommendation.action !== 'keep');
 }
@@ -646,7 +659,52 @@ function toggleTextLine(line) {
   mask.hidden = !mask.hidden;
   return mask;
 }
+function instructionFeedback(instruction) {
+  if (!instruction) return ['Custom privacy instruction', 'Open Sharing Settings and choose Review image to apply your instruction.'];
+  if (!instruction.enabled) return ['Instruction masks removed', 'Review the protected preview or restore the instruction.'];
+  const operation = instruction.operation;
+  if (!operation) return ['Additional review needed', 'Conservative protection is active. Edit the instruction, use a manual mask, or request optional AI help.'];
+  if (operation.type === 'draw_area') return ['Draw a mask for the area', 'Draw directly on the image. Then use Adjust box to move or resize the mask.'];
+  if (operation.type === 'keep_area') return instruction.keepArea
+    ? ['Selected area applied', 'Pixels outside your selection are covered. Other masks can still cover details inside it.']
+    : ['Select the area to keep', 'Review the image and draw around the area you want to keep, then confirm it.'];
+
+  const heading = instruction.source === 'ai' ? 'AI operation applied' : 'Instruction applied locally';
+  if (operation.type === 'mask_image') return [heading, 'An opaque mask covers the whole image. Undo the instruction to inspect the copy with your other masks.'];
+  if (operation.type === 'mask_half') return [heading, `An opaque mask covers the ${operation.side} half of the image.`];
+  if (['mask_text', 'mask_numbers'].includes(operation.type)) {
+    const subject = operation.type === 'mask_text' ? 'recognized text' : 'recognized words containing numbers';
+    return instructionRects.length
+      ? [heading, `Masks cover the ${subject}. Check the image for any missed text.`]
+      : ['Additional review needed', `There is no ${operation.type === 'mask_text' ? 'recognized text' : 'recognized numeric text'} to mask. Read the image again or add masks manually.`];
+  }
+  const categories = instructionFieldCategories(operation);
+  const matching = state.fields.filter(field => categories?.has(field.category));
+  const visible = matching.filter(field => !field.hidden).length;
+  if (!matching.length) return ['Additional review needed', 'No detected details match this instruction. Review the image for anything you need to cover.'];
+  if (visible) return [heading, `${matching.length - visible} of ${matching.length} matching details are marked hidden. Check the fields you chose to show.`];
+  return [heading, operation.type === 'mask_personal' ? 'Detected personal details are covered. Check the image for anything the scan may have missed.' : 'The matching detected fields are covered. Check the image for anything the scan may have missed.'];
+}
+function renderInstructionReview() {
+  const instruction = currentInstruction();
+  const type = instruction?.operation?.type;
+  const enabled = Boolean(instruction?.enabled);
+  $('instructionReview').hidden = state.context !== 'custom';
+  const [heading, feedback] = instructionFeedback(instruction);
+  const message = instruction && instruction.text !== state.customInstruction.trim()
+    ? feedback + ' Your draft has changed. Choose Review image to update this copy.' : feedback;
+  $('instructionReviewHeading').textContent = heading;
+  const status = $('instructionReviewMessage');
+  if (status.textContent !== message) status.textContent = message;
+  const draw = $('drawInstructionArea');
+  draw.hidden = !enabled || !['draw_area', 'keep_area'].includes(type);
+  draw.textContent = type === 'keep_area' ? 'Select visible area' : 'Draw a mask';
+  const toggle = $('toggleInstruction');
+  toggle.hidden = !type || type === 'draw_area' || type === 'keep_area' && !instruction.keepArea;
+  toggle.textContent = enabled ? 'Undo instruction' : 'Restore instruction';
+}
 function render() {
+  updateInstructionRectangles();
   showMaskTarget(null);
   renderCanvas(); renderFields();
   const isSample = state.source === 'sample'; const count = countMasks();
@@ -662,10 +720,11 @@ function render() {
     const choice = protectionContext();
     const orderAdvice = { redact: 'Suggest hiding', review: 'Review before showing', keep: 'Useful for delivery lookup' };
     $('contextOrder').textContent = choice.context && choice.purpose
-      ? orderAdvice[recommendField({ category: 'order' }, choice).action] : 'Depends on audience and purpose';
+      ? orderAdvice[recommendField({ category: 'order' }, choice).action] : 'Depends on sharing settings';
   }
   $('contextNote').hidden = !state.context;
   $('contextNote').textContent = audiences[state.context]?.note || '';
+  renderInstructionReview();
   const pending = state.fields.filter(field => field.pendingReveal);
   $('pendingRevealPanel').hidden = !pending.length;
   $('pendingRevealSummary').textContent = `${pending.length} suggested ${pending.length === 1 ? 'detail is' : 'details are'} still hidden`;
@@ -710,20 +769,20 @@ function render() {
   $('aiInsightsList').replaceChildren(...insights);
   $('reviewIntro').textContent = 'Choose what stays visible. Select a detail to find it in the image.';
   $('demoNotice').textContent = state.detecting ? (state.phase === 'ai' ? 'Analyzing recognized text. Earlier masks stay in place.' : 'Reading your image. Earlier masks stay in place.') : state.ocrDocument ? 'Suggestions may miss details. Check the whole image; overlapping masks may still cover a visible detail.' : isSample ? 'Fictional example with pre-labelled details. Review the whole image.' : 'No text results are available. Add masks for details you want to hide.';
-  const coverage = coverageSummary(state.fields, state.manual);
+  const coverage = coverageSummary(state.fields, state.manual, instructionRects);
   $('maskCount').textContent = String(coverage.detected);
   $('maskCount').setAttribute('aria-label', `${coverage.detected} detected details`);
   $('maskCount').title = `${coverage.detected} detected details`;
   $('reviewStates').textContent = `${coverage.detected} detected · ${coverage.hidden} hidden · ${coverage.markedVisible} marked visible${coverage.needsReview ? ` · ${coverage.needsReview} to check` : ''}`;
   const changedByAI = state.aiInsights.filter(item => item.kind === 'new' || item.kind === 'reclassified').length;
-  $('summaryText').textContent = `${coverage.hidden} hidden · ${coverage.manual} added ${coverage.manual === 1 ? 'mask' : 'masks'}${changedByAI ? ` · ${changedByAI} AI ${changedByAI === 1 ? 'finding' : 'findings'}` : ''}`;
+  $('summaryText').textContent = `${coverage.hidden} hidden · ${coverage.manual} added ${coverage.manual === 1 ? 'mask' : 'masks'}${instructionRects.length ? ` · ${instructionRects.length} instruction ${instructionRects.length === 1 ? 'mask' : 'masks'}` : ''}${changedByAI ? ` · ${changedByAI} AI ${changedByAI === 1 ? 'finding' : 'findings'}` : ''}`;
   $('fileLabel').textContent = state.filename;
   $('originalView').classList.toggle('active', state.view === 'original'); $('originalView').setAttribute('aria-pressed', String(state.view === 'original'));
   $('protectedView').classList.toggle('active', state.view === 'protected'); $('protectedView').setAttribute('aria-pressed', String(state.view === 'protected'));
-  $('canvasHint').textContent = state.adjusting ? 'Drag the corners or center to correct the box · Arrow keys move one pixel' : state.drawing ? 'Drag to add a mask · Click “Add a mask” to stop' : state.view === 'original' ? 'Original preview · Switch to Protected to change masks' : textLines.length ? 'Click any text line to mask it · Click a mask to reveal' : 'Click to remove · Click the same area to restore';
-  $('previewNote').textContent = state.adjusting ? 'Adjust the selected box on the original image. Press Escape or Finish adjusting when done.' : state.drawing ? 'Drag over a detail, then choose Finish masking.' : state.view === 'original' ? 'Original preview — selected masks are still applied to export.' : textLines.length ? 'Hover over recognized text to see its line. Click to cover it; click again to reveal it.' : 'Click a mask to reveal the detail; click the same area again to cover it. Review the whole image.';
+  $('canvasHint').textContent = state.drawing === 'keep' ? 'Drag a rectangle around the area to keep' : state.adjusting ? 'Drag the corners or center to correct the box · Arrow keys move one pixel' : state.drawing ? 'Drag to add a mask · Click “Add a mask” to stop' : state.view === 'original' ? 'Original preview · Switch to Protected to change masks' : textLines.length ? 'Click any text line to mask it · Click a mask to reveal' : 'Click to remove · Click the same area to restore';
+  $('previewNote').textContent = state.drawing === 'keep' ? 'Drag around the area to keep, then confirm your selection.' : state.adjusting ? 'Adjust the selected box on the original image. Press Escape or Finish adjusting when done.' : state.drawing ? 'Drag over a detail, then choose Finish masking.' : state.view === 'original' ? 'Original preview — selected masks are still applied to export.' : instructionRects.length ? 'Use Undo instruction in Review to remove the instruction’s masks.' : textLines.length ? 'Hover over recognized text to see its line. Click to cover it; click again to reveal it.' : 'Click a mask to reveal the detail; click the same area again to cover it. Review the whole image.';
   $('finishAdjustButton').hidden = !state.adjusting;
-  $('mobileDrawButton').textContent = state.adjusting ? 'Finish adjusting' : state.drawing ? 'Finish masking' : 'Add a mask';
+  $('mobileDrawButton').textContent = state.adjusting ? 'Finish adjusting' : state.drawing === 'keep' ? 'Cancel selection' : state.drawing ? 'Finish masking' : 'Add a mask';
   $('mobileDrawButton').setAttribute('aria-pressed', String(Boolean(state.adjusting || state.drawing)));
   $('preserveNote').querySelector('strong').textContent = isSample ? 'The useful part stays.' : 'Review the whole image.';
   $('preserveNote').querySelector('p').textContent = isSample ? plan.keep : 'Sensitive details outside your masks will remain visible in the export.';
@@ -746,10 +805,23 @@ function announce(message, { undo = false } = {}) {
   const close = document.createElement('button'); close.type = 'button'; close.textContent = '×'; close.setAttribute('aria-label', 'Dismiss notification'); close.addEventListener('click', () => { toast.hidden = true; }); toast.append(close);
   toast.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => { toast.hidden = true; }, 7000);
 }
-function setDrawing(enabled) { state.drawing = enabled; if (enabled) { state.adjusting = null; state.reviewExpanded = false; setPanning(false); } state.drag = null; $('canvasWrap').classList.toggle('drawing', enabled); $('drawButton').setAttribute('aria-pressed', String(enabled)); $('drawButton').lastChild.textContent = enabled ? ' Finish masking' : ' Add a mask'; $('mobileDrawButton').setAttribute('aria-pressed', String(enabled)); $('mobileDrawButton').textContent = enabled ? 'Finish masking' : 'Add a mask'; $('drawHint').hidden = !enabled; if (enabled) state.view = 'protected'; }
+function setDrawing(enabled, { keep = false } = {}) {
+  state.drawing = enabled && (keep ? 'keep' : 'mask');
+  if (enabled) { state.adjusting = null; state.reviewExpanded = false; setPanning(false); }
+  state.drag = null;
+  $('canvasWrap').classList.toggle('drawing', enabled);
+  $('drawButton').setAttribute('aria-pressed', String(enabled));
+  $('drawButton').lastChild.textContent = enabled ? (keep ? ' Cancel selection' : ' Finish masking') : ' Add a mask';
+  $('mobileDrawButton').setAttribute('aria-pressed', String(enabled));
+  $('drawHint').textContent = keep ? 'Drag around the area to keep' : 'Drag to cover a detail';
+  $('drawHint').hidden = !enabled;
+  if (enabled) state.view = 'protected';
+}
 function point(event) { const r = canvas.getBoundingClientRect(); return [Math.max(0, Math.min(base.width, (event.clientX - r.left) * base.width / r.width)), Math.max(0, Math.min(base.height, (event.clientY - r.top) * base.height / r.height))]; }
 function maskAtPoint(position) {
   if (state.drawing || state.adjusting || state.view !== 'protected') return null;
+  const [x, y] = position;
+  if (instructionRects.some(([left, top, w, h]) => x >= left && x < left + w && y >= top && y < top + h)) return null;
   return maskTargetAtPoint(position, state.fields, state.manual, textLines);
 }
 function showMaskTarget(target) {
@@ -763,8 +835,14 @@ function showMaskTarget(target) {
     Object.assign(lineHighlight.style, { left: `${x / base.width * 100}%`, top: `${y / base.height * 100}%`, width: `${width / base.width * 100}%`, height: `${height / base.height * 100}%` });
   }
 }
-function dragRect() { const { start, end } = state.drag; return [Math.floor(Math.min(start[0], end[0])), Math.floor(Math.min(start[1], end[1])), Math.ceil(Math.abs(end[0] - start[0])), Math.ceil(Math.abs(end[1] - start[1]))]; }
+function dragRect() {
+  const { start, end } = state.drag;
+  const x = Math.floor(Math.min(start[0], end[0])), y = Math.floor(Math.min(start[1], end[1]));
+  return [x, y, Math.ceil(Math.max(start[0], end[0])) - x, Math.ceil(Math.max(start[1], end[1])) - y];
+}
 canvas.addEventListener('click', event => {
+  // A completed drag can dispatch a click after opening the keep-area dialog.
+  if (document.querySelector('dialog[open]')) return;
   const target = maskAtPoint(point(event));
   if (state.panning || !target) return;
   const mask = target.line ? toggleTextLine(target.line) : target.mask;
@@ -787,7 +865,13 @@ canvas.addEventListener('pointerleave', () => showMaskTarget(null));
 canvas.addEventListener('pointerup', event => {
   if (!state.drag) return;
   state.drag.end = point(event); const rect = dragRect();
-  if (rect[2] >= 5 && rect[3] >= 5) { state.manual.push({ id: state.nextId++, rect, hidden: true }); announce('Manual mask added. Stop drawing to click it off or back on.'); }
+  if (rect[2] >= 5 && rect[3] >= 5) {
+    if (state.drawing === 'keep') {
+      previewKeepArea(rect);
+      return;
+    }
+    state.manual.push({ id: state.nextId++, rect, hidden: true }); announce('Manual mask added. Stop drawing to click it off or back on.');
+  }
   state.drag = null; render();
 });
 canvas.addEventListener('pointercancel', () => { state.drag = null; renderCanvas(); });
@@ -853,7 +937,6 @@ $('canvasStage').addEventListener('wheel', event => {
 $('drawButton').addEventListener('click', () => { setDrawing(!state.drawing); render(); if (state.drawing) announce('Drag over a detail on the image to cover it. Press Escape to stop drawing.'); });
 $('undoButton').addEventListener('click', () => { const removed = state.manual.pop(); if (state.adjusting?.type === 'manual' && state.adjusting.id === removed?.id) state.adjusting = null; render(); });
 $('resetButton').addEventListener('click', () => { clearContextChange(); cancelDetection(); state.manual = []; state.nextId = 1; resetFields(true); state.view = 'protected'; setDrawing(false); render(); setAIStatus('Recommendations reset. Review the whole image before sharing.'); announce(state.aiDetected ? 'AI recommendations reset for this audience; manual masks removed.' : state.source === 'sample' ? 'Sample recommendations reset for the selected audience.' : 'Manual masks removed. Run AI detection or add masks manually.'); });
-$('sharingPurpose').addEventListener('change', event => setContext({ purpose: event.target.value }));
 $('documentType').addEventListener('change', event => setContext({
   documentType: event.target.value, typeSource: 'manual', typeReason: 'Type selected by you.'
 }));
@@ -862,7 +945,71 @@ $('useLocalType').addEventListener('click', () => {
   const result = classifyDocument(state.ocrDocument);
   setContext({ documentType: result.type, typeSource: 'local', typeReason: result.reason });
 });
-$('customPurpose').addEventListener('input', event => setContext({ customPurpose: event.target.value }, { typing: true }));
+$('customInstruction').addEventListener('input', event => updateInstructionDraft(event.target.value));
+$('customInstructionPanel').addEventListener('click', event => {
+  const example = event.target.closest('[data-example]');
+  if (!example) return;
+  updateInstructionDraft(example.dataset.example);
+  const field = $('customInstruction');
+  field.focus();
+  field.setSelectionRange(field.value.length, field.value.length);
+});
+function updateInstructionDraft(value) {
+  const text = value.slice(0, instructionLimit);
+  if (text === state.customInstruction) return;
+  state.customInstruction = text;
+  state.waitingForOCR = false;
+  sharingVersion++;
+  invalidateProtection();
+  renderContextOptions();
+}
+$('editInstruction').addEventListener('click', () => {
+  openContextDialog();
+  $('customInstruction').focus();
+});
+$('drawInstructionArea').addEventListener('click', () => {
+  const instruction = currentInstruction();
+  if (!instruction?.enabled) return;
+  const keep = instruction.operation.type === 'keep_area';
+  setDrawing(true, { keep });
+  render();
+  $('previewHeading').scrollIntoView({ block: 'nearest' });
+  $('previewHeading').focus({ preventScroll: true });
+  announce(keep ? 'Drag a rectangle around the area to keep.' : 'Drag a mask over the area you want to hide.');
+});
+$('toggleInstruction').addEventListener('click', () => {
+  const instruction = currentInstruction();
+  if (!instruction?.operation) return;
+  applyInstruction({ ...instruction, enabled: !instruction.enabled });
+  render();
+});
+function previewKeepArea(rect) {
+  const instruction = currentInstruction();
+  state.drag = null;
+  if (instruction?.operation?.type !== 'keep_area' || !validKeepArea(rect, base.width, base.height)) {
+    renderCanvas();
+    announce('Choose a smaller area within the screenshot.');
+    return;
+  }
+  keepAreaDraft = { instruction, rect };
+  setDrawing(false);
+  render();
+  const rectangles = instructionRectangles(instruction.operation, { width: base.width, height: base.height, keepArea: rect });
+  drawImage($('keepAreaPreview'), true, rectangles, 650);
+  $('keepAreaDialog').showModal();
+}
+$('confirmKeepArea').addEventListener('click', () => {
+  const draft = keepAreaDraft;
+  if (!$('keepAreaDialog').open || !draft || draft.instruction !== currentInstruction() || !validKeepArea(draft.rect, base.width, base.height)) return;
+  applyInstruction({ ...draft.instruction, keepArea: draft.rect });
+  $('keepAreaDialog').close();
+  render();
+  $('previewHeading').focus({ preventScroll: true });
+});
+$('keepAreaDialog').addEventListener('close', () => {
+  keepAreaDraft = null;
+  $('keepAreaPreview').width = 0;
+});
 $('recipientDetail').addEventListener('input', event => { state.recipientDetail = event.target.value; });
 $('sampleSelect').addEventListener('change', event => { loadExample(event.target.value); });
 $('sampleButton').addEventListener('click', () => loadExample(state.sampleKind));
@@ -975,7 +1122,7 @@ async function scanLocally() {
     if (currentId === detectionId) {
       const proceed = state.waitingForOCR && state.ocrStatus === 'complete' && $('contextDialog').open && !contextReviewBlocker();
       state.detecting = false; state.phase = ''; detectionController = null; state.waitingForOCR = false;
-      if (proceed) showReview();
+      if (proceed) showReview({ applyCustom: true });
       else render();
     }
   }
@@ -1124,25 +1271,26 @@ $('exportButton').addEventListener('click', async () => {
 
     // Capture the review information in the same turn as the pixels.
     const plan = currentPlan();
-    const choice = resolveSharingChoice(state);
-    const description = state.customPurpose.trim();
+    const choice = protectionContext();
+    const description = state.instruction?.text;
     const kept = state.fields.filter(field => !field.hidden).map(field => field.name.toLowerCase());
-    const coverage = coverageSummary(state.fields, state.manual);
+    const coverage = coverageSummary(state.fields, state.manual, instructionRects);
     const textSource = state.ocrDocument
       ? (state.aiDetected ? `Text classification: ${state.detectedModel}.` : 'Local text detection.')
       : 'No current OCR results. Review every part of the image.';
     const snapshot = {
       loadId: state.loadId,
-      filename: `privacylens-${state.documentType}-${state.context || 'unspecified'}-${choice.purpose || 'unspecified'}-${state.source === 'sample' ? 'sample' : 'image'}.png`,
+      filename: `privacylens-${state.documentType}-${state.context || 'unspecified'}-${state.source === 'sample' ? 'sample' : 'image'}.png`,
       context: [
         `${plan.label}.`,
-        choice.custom ? `Your purpose: ${description}${/[.!?。！？]$/u.test(description) ? '' : '.'}` : '',
+        choice.custom && description ? `Privacy instruction: ${description}${/[.!?。！？]$/u.test(description) ? '' : '.'}` : '',
         state.recipientDetail ? `Recipient note: ${state.recipientDetail}.` : '',
-        plan.note, 'Check that every visible detail is needed for this purpose.'
+        plan.note, 'Check that every visible detail is needed for this copy.'
       ].filter(Boolean).join(' '),
       details: [
         `${coverage.detected} detected details: ${coverage.hidden} hidden, ${coverage.markedVisible} marked visible.`,
         `${coverage.manual} added ${coverage.manual === 1 ? 'mask' : 'masks'}. ${coverage.masks} solid ${coverage.masks === 1 ? 'mask' : 'masks'} applied.`,
+        instructionRects.length ? `${instructionRects.length} ${instructionRects.length === 1 ? 'mask comes' : 'masks come'} from your privacy instruction.` : '',
         textSource, 'Check missed text, edges, QR codes, barcodes and faces.',
         kept.length ? `Set to visible: ${kept.join(', ')}. Overlapping masks may still cover these details.` : '',
         coverage.needsReview ? `${coverage.needsReview} ${coverage.needsReview === 1 ? 'detail needs' : 'details need'} review and stay masked by default.` : '',
@@ -1189,19 +1337,22 @@ function renderFlow() {
   introDemo.setActive(intro);
   if (window.location.hash !== routeForFlow()) history.pushState(null, '', routeForFlow());
   $('analysisBanner').hidden = !state.detecting;
-  const choice = resolveSharingChoice(state);
   $('typeButton').textContent = documentTypes[state.documentType].label;
   $('contextButton').replaceChildren();
   const label = document.createElement('span'); label.className = 'current-context';
-  const purpose = choice.custom && choice.purpose !== 'custom' ? `Custom · ${purposeRegistry[choice.purpose].label}` : purposeRegistry[choice.purpose]?.label;
-  label.textContent = state.context ? [audiences[state.context].label, purpose].filter(Boolean).join(' · ') : 'Who are you sharing with?';
+  label.textContent = state.context === 'custom' ? 'Custom' : audiences[state.context]?.label || 'Sharing settings';
   const change = document.createElement('span'); change.textContent = 'Change ↗'; $('contextButton').append(label, change);
   $('editorWorkspace').classList.toggle('sheet-open', state.reviewExpanded);
   $('reviewToggle').setAttribute('aria-expanded', String(state.reviewExpanded)); $('sheetLabel').textContent = state.reviewExpanded ? 'Back to image' : 'Review details'; $('sheetArrow').textContent = state.reviewExpanded ? '↓' : '↑';
   $('aiButton').disabled = state.detecting;
 }
-function openContextDialog() {
+function openContextDialog({ showType = false } = {}) {
   if (!state.hasImage) return;
+  setDrawing(false);
+  if (!$('contextDialog').open) {
+    $('typeSettings').open = showType;
+    $('toast').hidden = true;
+  }
   state.flow = 'context'; render();
   if (!$('contextDialog').open) {
     $('contextDialog').showModal();
@@ -1209,7 +1360,7 @@ function openContextDialog() {
   }
 }
 function closeWorkDialogs() {
-  for (const id of ['contextDialog', 'moreDialog', 'aiDialog', 'protectionDialog', 'protectionChoiceDialog', 'reapplyDialog', 'exportDialog', 'aboutDialog']) {
+  for (const id of ['contextDialog', 'moreDialog', 'aiDialog', 'protectionDialog', 'protectionChoiceDialog', 'keepAreaDialog', 'reapplyDialog', 'exportDialog', 'aboutDialog']) {
     if ($(id).open) $(id).close();
   }
 }
@@ -1231,23 +1382,18 @@ function stopScanning() {
   cancelDetection(); render();
   setAIStatus(ai ? 'Analysis cancelled. A sent request may still finish at the provider.' : 'Text reading cancelled. Review the image or retry reading.');
 }
-function showReview() {
+function showReview({ applyCustom = false } = {}) {
   state.waitingForOCR = false;
+  if (applyCustom) commitInstruction();
   state.flow = 'review';
   if ($('contextDialog').open) $('contextDialog').close();
   render();
+  if (applyCustom && state.context === 'custom') $('reviewScroll').scrollTop = 0;
   if (contextUndo) announce(contextFeedback, { undo: true });
   $('previewHeading').focus({ preventScroll: true });
 }
-$('sharingAudiences').addEventListener('click', event => {
-  const button = event.target.closest('[data-audience]');
-  if (button) setContext({ context: button.dataset.audience });
-});
-$('confirmPurpose').addEventListener('click', () => {
-  const { match } = resolveSharingChoice(state);
-  if (match?.status !== 'matched') return;
-  setContext({ confirmedPurpose: match.purpose });
-  $('customPurpose').focus({ preventScroll: true });
+$('sharingAudiences').addEventListener('change', event => {
+  if (event.target.name === 'sharing-mode' && event.target.checked) setContext({ context: event.target.value });
 });
 $('acceptContextConflict').addEventListener('click', () => {
   state.acceptedConflict = true; renderContextOptions();
@@ -1258,19 +1404,19 @@ $('continueContext').addEventListener('click', () => {
   if (state.phase === 'ocr') {
     state.waitingForOCR = true; renderContextOptions();
   } else {
-    showReview();
+    showReview({ applyCustom: true });
   }
 });
 $('retryChooseOCR').addEventListener('click', () => { void scanLocally(); });
 $('skipContext').addEventListener('click', () => {
-  if (!resolveSharingChoice(state).compatible && !typePending()) state.acceptedConflict = true;
+  if (!protectionContext().compatible && !typePending()) state.acceptedConflict = true;
   showReview();
 });
 $('contextDialog').addEventListener('close', () => {
   if (!$('contextDialog').open && state.flow === 'context') showReview();
 });
-$('contextButton').addEventListener('click', openContextDialog);
-$('typeButton').addEventListener('click', () => { $('typeSettings').open = true; openContextDialog(); });
+$('contextButton').addEventListener('click', () => openContextDialog());
+$('typeButton').addEventListener('click', () => openContextDialog({ showType: true }));
 $('editTypeButton').addEventListener('click', () => { $('typeSettings').open = !$('typeSettings').open; });
 $('moreButton').addEventListener('click', () => $('moreDialog').showModal());
 async function openAIDetectionConsent() {
@@ -1317,49 +1463,75 @@ function protectionVersion() {
 }
 
 function currentProtectionResult() {
-  const result = purposeReview.result;
+  const result = sharingAI.result;
   return result && sameProtectionVersion(result.version, protectionVersion()) ? result : null;
 }
 
 function cancelProtectionRequest(message) {
-  if (!purposeReview.request) return;
-  purposeReview.request.controller.abort();
-  purposeReview.request = null;
-  purposeReview.message = message;
+  if (!sharingAI.request) return;
+  sharingAI.request.controller.abort();
+  sharingAI.request = null;
+  sharingAI.message = message;
 }
 
 function invalidateProtection() {
-  const active = purposeReview.request || purposeReview.result;
+  const active = sharingAI.request || sharingAI.result || sharingAI.interpretation;
   const message = active ? 'Sharing settings or detected details changed. Get new suggestions for this copy.' : '';
   cancelProtectionRequest(message);
-  purposeReview.preview = null;
-  purposeReview.result = null;
-  purposeReview.change = null;
-  purposeReview.message = message;
+  sharingAI.preview = null;
+  sharingAI.result = null;
+  sharingAI.interpretation = null;
+  sharingAI.change = null;
+  sharingAI.message = message;
   for (const id of ['protectionDialog', 'protectionChoiceDialog']) {
     if ($(id).open) $(id).close();
   }
 }
 
-function protectionBlocker() {
+function protectionBlocker(kind) {
   if (state.detecting || loadingImageId === state.loadId) return 'Wait for the current image or text analysis.';
-  if (!documentTypes[state.documentType].audiences.includes(state.context)) return 'Choose a supported audience for this document type.';
+  const choice = protectionContext();
+  if (!choice.compatible) return 'Choose a supported audience for this document type.';
+  if (choice.custom && currentInstruction()?.text !== state.customInstruction.trim()) {
+    return 'Choose Review image in Sharing Settings to use this instruction.';
+  }
+  if (kind === 'instruction') return '';
   if (!state.fields.length) return 'Read the image for detected details first.';
   if (state.fields.length > protectionLimits.fields) return 'Use a copy with up to 100 detected details for AI sharing suggestions.';
   return '';
 }
 
+function canInterpretInstruction() {
+  const instruction = currentInstruction();
+  return Boolean(instruction?.enabled && !instruction.operation);
+}
+function currentInterpretation() {
+  const interpretation = sharingAI.interpretation;
+  return interpretation && sameProtectionVersion(interpretation.version, protectionVersion()) ? interpretation : null;
+}
 function renderProtectionControls() {
-  const show = state.hasImage && Boolean(state.customPurpose.trim());
+  const show = state.hasImage && Boolean(state.context);
+  const interpret = show && canInterpretInstruction();
+  const fieldBlocker = show ? protectionBlocker('fields') : '';
+  const instructionBlocker = interpret ? protectionBlocker('instruction') : '';
   $('protectionPanel').hidden = !show;
-  const blocker = show ? protectionBlocker() : '';
-  $('protectionButton').disabled = !show || Boolean(blocker || purposeReview.request);
-  $('cancelProtection').hidden = !purposeReview.request;
-  const message = purposeReview.request ? 'Analyzing your sharing purpose. You can keep reviewing this image.' : blocker || purposeReview.message;
+  $('protectionButton').disabled = !show || Boolean(fieldBlocker || sharingAI.request);
+  $('interpretInstruction').hidden = !interpret;
+  $('interpretInstruction').disabled = Boolean(instructionBlocker || sharingAI.request);
+  $('cancelProtection').hidden = !sharingAI.request;
+  const message = sharingAI.request
+    ? (sharingAI.request.kind === 'instruction' ? 'Interpreting your privacy instruction…' : 'Getting AI suggestions for the detected fields…')
+    : sharingAI.message || (interpret ? instructionBlocker : fieldBlocker);
   if ($('protectionStatus').textContent !== message) $('protectionStatus').textContent = message;
-  const preview = purposeReview.preview;
-  $('requestProtection').disabled = !show || Boolean(blocker || purposeReview.request) || !$('protectionConsent').checked
-    || !preview || !sameProtectionVersion(preview.version, protectionVersion());
+  const interpretation = currentInterpretation();
+  $('instructionAIResult').hidden = !interpretation;
+  $('applyAIInstruction').disabled = Boolean(sharingAI.request || state.detecting);
+  if (interpretation) $('instructionAIProposal').textContent = instructionOperationLabel(interpretation.operation) + '. Review this suggestion before applying it.';
+  const preview = sharingAI.preview;
+  const canConsent = show && preview?.provider && !sharingAI.request && !protectionBlocker(preview.kind)
+    && sameProtectionVersion(preview.version, protectionVersion());
+  $('protectionConsent').disabled = !canConsent;
+  $('requestProtection').disabled = !canConsent || !$('protectionConsent').checked;
 }
 
 function renderProtectionSuggestion(field, suggestion) {
@@ -1368,7 +1540,7 @@ function renderProtectionSuggestion(field, suggestion) {
   item.dataset.protectionAction = suggestion.action;
   const label = document.createElement('strong');
   const actionLabels = { hide: 'Hide', keep: 'Keep', review: 'Review' };
-  label.textContent = `AI purpose suggestion · ${actionLabels[suggestion.action]}`;
+  label.textContent = `AI field suggestion · ${actionLabels[suggestion.action]}`;
   const reason = document.createElement('p');
   reason.textContent = suggestion.reason;
   item.append(label, reason);
@@ -1384,59 +1556,110 @@ function renderProtectionSuggestion(field, suggestion) {
   return item;
 }
 
-$('protectionButton').addEventListener('click', () => {
-  if (!state.customPurpose.trim() || protectionBlocker() || purposeReview.request) return;
+async function openSharingAI(kind) {
+  if (!state.context || protectionBlocker(kind) || sharingAI.request) return;
+  const interpret = kind === 'instruction';
+  if (interpret && !canInterpretInstruction()) return;
+  const instruction = currentInstruction();
   $('protectionConsent').checked = false;
   $('protectionDataDetails').open = false;
+  let preview;
   try {
-    purposeReview.preview = { ...createProtectionInput(state, state.fields), version: protectionVersion() };
+    let input;
+    if (interpret) {
+      input = { body: createInstructionRequest(state.documentType, instruction.text, state.fields) };
+    } else {
+      const choice = protectionContext();
+      const context = choice.custom ? 'unspecified' : choice.context;
+      const task = choice.purpose !== 'custom' ? purposeRegistry[choice.purpose]?.label : '';
+      const customPurpose = instruction?.text || task || 'Share for general assistance. A need for specific personal identifiers has not been established.';
+      input = createProtectionInput({ documentType: state.documentType, context, customPurpose }, state.fields);
+    }
+    preview = { ...input, kind, version: protectionVersion(), provider: null };
   } catch (error) {
-    purposeReview.message = error.message;
+    sharingAI.message = error.message;
     renderProtectionControls();
     return;
   }
-  const { body } = purposeReview.preview;
-  $('protectionPurposePreview').textContent = body.purpose;
-  $('protectionContextPreview').textContent = `${audiences[body.audience].label} · ${documentTypes[body.documentType].label}`;
-  const counts = new Map();
-  for (const field of body.fields) counts.set(field.category, (counts.get(field.category) || 0) + 1);
-  $('protectionFieldsPreview').textContent = [...counts].map(([category, count]) => `${categoryNames[category]} × ${count}`).join(' · ');
+  sharingAI.preview = preview;
+  const { body } = preview;
+  $('protectionTypeLabel').textContent = interpret ? 'OPTIONAL AI INTERPRETATION' : 'OPTIONAL AI PROTECTION';
+  $('protectionHeading').textContent = interpret ? 'Interpret my instruction' : 'Suggest what to share';
+  $('protectionDisclosure').textContent = interpret
+    ? 'This sends the screened instruction, document type and field categories through this site’s server to'
+    : 'This sends the screened sharing context, audience, document type and field metadata through this site’s server to';
+  $('protectionTextLabel').textContent = instruction ? 'Instruction to be sent' : 'Sharing context to be sent';
+  $('protectionPurposePreview').textContent = interpret ? body.instruction : body.purpose;
+  $('protectionContextLabel').textContent = interpret ? 'Document type' : 'Audience and document';
+  const documentLabel = documentTypes[body.documentType].label;
+  $('protectionContextPreview').textContent = interpret ? documentLabel : `${audiences[body.audience]?.label || 'Audience unspecified'} · ${documentLabel}`;
+  const categories = interpret ? body.categories : [...new Set(body.fields.map(field => field.category))];
+  $('protectionFieldsPreview').textContent = categories.map(category => categoryNames[category]).join(' · ') || 'None detected';
+  $('protectionPrivacyHelp').textContent = interpret
+    ? 'The instruction can still contain personal information. Check the preview. AI can suggest a masking operation for you to review.'
+    : 'The sharing context can still contain personal information. Check the preview. Review the suggestions before changing visibility.';
+  $('protectionConsentLabel').textContent = interpret
+    ? 'I agree to send this screened instruction and listed metadata for AI interpretation.'
+    : 'I agree to send this screened context and listed metadata for AI field suggestions.';
+  $('requestProtection').textContent = interpret ? 'Interpret instruction' : 'Get sharing suggestions';
+  $('protectionProvider').textContent = 'the configured AI provider';
+  $('protectionProviderStatus').textContent = 'Checking the configured AI provider…';
   $('protectionPayloadPreview').textContent = JSON.stringify(body, null, 2);
   renderProtectionControls();
+  $('toast').hidden = true;
   $('protectionDialog').showModal();
-});
+  $('protectionHeading').focus({ preventScroll: true });
+  const provider = await readConfiguredProvider();
+  if (!$('protectionDialog').open || sharingAI.preview !== preview || !sameProtectionVersion(preview.version, protectionVersion())) return;
+  preview.provider = provider;
+  $('protectionProviderStatus').textContent = provider ? '' : 'The AI provider is unavailable. Close this dialog to continue reviewing.';
+  if (provider) $('protectionProvider').textContent = provider;
+  renderProtectionControls();
+}
+$('protectionButton').addEventListener('click', () => void openSharingAI('fields'));
+$('interpretInstruction').addEventListener('click', () => void openSharingAI('instruction'));
 $('protectionConsent').addEventListener('change', renderProtectionControls);
 $('protectionDialog').addEventListener('close', () => {
   if (!$('protectionDialog').open) {
-    purposeReview.preview = null;
+    sharingAI.preview = null;
     $('protectionConsent').checked = false;
     renderProtectionControls();
   }
 });
 $('cancelProtection').addEventListener('click', () => {
+  const kind = sharingAI.request?.kind;
   cancelProtectionRequest('Sharing analysis cancelled. Continue reviewing the image.');
   renderProtectionControls();
-  $('protectionButton').focus({ preventScroll: true });
+  $(kind === 'instruction' ? 'interpretInstruction' : 'protectionButton').focus({ preventScroll: true });
 });
 
 $('requestProtection').addEventListener('click', async () => {
-  const preview = purposeReview.preview;
-  if (!$('protectionDialog').open || !$('protectionConsent').checked || protectionBlocker() || purposeReview.request
-      || !preview || !sameProtectionVersion(preview.version, protectionVersion())) return;
+  const preview = sharingAI.preview;
+  if (!$('protectionDialog').open || $('requestProtection').disabled || !$('protectionConsent').checked || sharingAI.request
+      || !preview?.provider || protectionBlocker(preview.kind) || !sameProtectionVersion(preview.version, protectionVersion())) return;
+  const interpret = preview.kind === 'instruction';
   const controller = new AbortController();
-  const request = { controller };
-  purposeReview.request = request;
-  purposeReview.result = null;
-  purposeReview.message = '';
+  const request = { controller, kind: preview.kind };
+  sharingAI.request = request;
+  if (interpret) sharingAI.interpretation = null;
+  else sharingAI.result = null;
+  sharingAI.message = '';
   $('protectionDialog').close();
   render();
   const timeout = setTimeout(() => controller.abort(), AI_BUDGET.browserMs);
   try {
-    const response = await readAPI(await fetch('/api/ai?action=recommend-protection', {
+    const action = interpret ? 'interpret-instruction' : 'recommend-protection';
+    const response = await readAPI(await fetch(`/api/ai?action=${action}`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(preview.body), signal: controller.signal
     }));
-    if (purposeReview.request !== request || !sameProtectionVersion(preview.version, protectionVersion())) return;
+    if (sharingAI.request !== request || !sameProtectionVersion(preview.version, protectionVersion())) return;
     controller.signal.throwIfAborted();
+    if (interpret) {
+      const [operation] = validateInstructionOperations(response, preview.body.categories);
+      sharingAI.interpretation = operation ? { version: preview.version, operation } : null;
+      sharingAI.message = operation ? 'AI interpretation ready' : 'AI found no supported masking operation. Review the image or use manual masks.';
+      return;
+    }
     const decisions = validateProtectionDecisions(response, preview.body.fields);
     const fields = new Map(state.fields.map(field => [field.id, field]));
     const suggestions = new Map(decisions.map(decision => {
@@ -1444,19 +1667,27 @@ $('requestProtection').addEventListener('click', async () => {
       if (!field) throw new Error('A detected detail changed. Get new suggestions for this copy.');
       return [field.id, safeProtectionRecommendation(field, preview.body, decision)];
     }));
-    purposeReview.result = { version: preview.version, suggestions };
+    sharingAI.result = { version: preview.version, suggestions };
     const remaining = preview.body.fields.length - suggestions.size;
-    purposeReview.message = suggestions.size
+    sharingAI.message = suggestions.size
       ? `Review ${suggestions.size} AI ${suggestions.size === 1 ? 'suggestion' : 'suggestions'} in the field list.${remaining ? ' Other details use local recommendations.' : ''}`
       : 'AI returned no suggestions. Review the local recommendations.';
   } catch (error) {
-    if (purposeReview.request === request && sameProtectionVersion(preview.version, protectionVersion())) {
-      purposeReview.message = controller.signal.aborted ? 'Sharing analysis timed out. Continue reviewing the local recommendations.' : error.message;
+    if (sharingAI.request === request && sameProtectionVersion(preview.version, protectionVersion())) {
+      sharingAI.message = controller.signal.aborted ? 'Sharing analysis timed out. Continue reviewing the local recommendations.'
+        : interpret ? 'AI interpretation is unavailable. Continue reviewing the current protection.' : error.message;
     }
   } finally {
     clearTimeout(timeout);
-    if (purposeReview.request === request) { purposeReview.request = null; render(); }
+    if (sharingAI.request === request) { sharingAI.request = null; render(); }
   }
+});
+$('applyAIInstruction').addEventListener('click', () => {
+  const interpretation = currentInterpretation();
+  if (!interpretation || !canInterpretInstruction() || state.detecting || sharingAI.request || protectionBlocker('instruction')) return;
+  applyInstruction({ ...currentInstruction(), operation: interpretation.operation, source: 'ai' });
+  render();
+  $('editInstruction').focus({ preventScroll: true });
 });
 
 function openProtectionChoice(id) {
@@ -1466,7 +1697,7 @@ function openProtectionChoice(id) {
   if (!field || !suggestion) return;
   const hidden = protectionMaskChange(field, suggestion);
   if (hidden === null) return;
-  purposeReview.change = { id, hidden, result };
+  sharingAI.change = { id, hidden, result };
   $('protectionChoiceHeading').textContent = `${hidden ? 'Hide' : 'Show'} ${field.name.toLowerCase()}?`;
   $('protectionChoiceDetail').textContent = hidden ? suggestion.reason
     : `${suggestion.reason} Check who will receive the image and what they need before showing this detail. Overlapping masks can still cover it.`;
@@ -1475,10 +1706,10 @@ function openProtectionChoice(id) {
 }
 
 $('protectionChoiceDialog').addEventListener('close', () => {
-  if (!$('protectionChoiceDialog').open) purposeReview.change = null;
+  if (!$('protectionChoiceDialog').open) sharingAI.change = null;
 });
 $('confirmProtectionChoice').addEventListener('click', () => {
-  const change = purposeReview.change;
+  const change = sharingAI.change;
   const result = currentProtectionResult();
   if (!$('protectionChoiceDialog').open || !change || change.result !== result) return;
   const field = state.fields.find(item => item.id === change.id);
@@ -1544,12 +1775,9 @@ async function loadProviderDisclosure() {
   const provider = await readConfiguredProvider();
   if (!provider) return;
   for (const label of document.querySelectorAll('[data-ai-provider]')) {
-    if (!$('aiDialog').open || !$('aiDialog').contains(label)) label.textContent = provider;
-  }
-  if ($('protectionDialog').open) {
-    $('protectionConsent').checked = false;
-    renderProtectionControls();
+    if (!label.closest('dialog[open]')) label.textContent = provider;
   }
 }
+buildSharingCards();
 setSample();
 void loadProviderDisclosure();

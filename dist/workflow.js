@@ -1,5 +1,22 @@
 import { documentTypes } from './document-context.js';
 
+// These defaults drive local rules without inferring a specific support request.
+const sharingDefaults = {
+  delivery: { public: 'share', circle: 'share', team: 'advice' },
+  transcript: { public: 'showcase', circle: 'showcase' },
+  chat: { public: 'post', circle: 'advice', team: 'advice' },
+  technical_screenshot: { public: 'technical_help', support: 'software_support', team: 'team_debug' },
+  general: { public: 'share', circle: 'advice', team: 'advice' }
+};
+
+export function editorSharingChoice(documentType, selection) {
+  const custom = selection === 'custom';
+  const context = custom ? '' : selection;
+  const compatible = !context || documentTypes[documentType].audiences.includes(context);
+  const purpose = custom ? 'custom' : context && compatible ? sharingDefaults[documentType][context] || 'custom' : '';
+  return { documentType, context, custom, compatible, purpose };
+}
+
 // Each visible choice states a concrete task. Ambiguous recipients ask a follow-up.
 const publicChoice = (purpose, detail) => ({ id: 'public', label: 'Public', detail, audience: 'public', purpose });
 const friends = (purpose) => ({ id: 'friends', label: 'Friends & family', detail: 'Share with a small private group', audience: 'circle', purpose });

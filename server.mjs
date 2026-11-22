@@ -20,6 +20,7 @@ const files = new Map([
   ['/contextual-detection.js', ['contextual-detection.js', 'text/javascript; charset=utf-8']],
   ['/sharing-context.js', ['sharing-context.js', 'text/javascript; charset=utf-8']],
   ['/protection.js', ['protection.js', 'text/javascript; charset=utf-8']],
+  ['/privacy-instruction.js', ['privacy-instruction.js', 'text/javascript; charset=utf-8']],
   ['/editor-geometry.js', ['editor-geometry.js', 'text/javascript; charset=utf-8']],
   ['/privacy-types.js', ['privacy-types.js', 'text/javascript; charset=utf-8']],
   ['/document-context.js', ['document-context.js', 'text/javascript; charset=utf-8']],

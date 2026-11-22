@@ -81,13 +81,14 @@ export function aiInsights(previous, aiFields, current) {
 }
 
 // The same active rectangles drive both the preview and the flattened export.
-export function activeMasks(fields, manual) {
+export function activeMasks(fields, manual, instructionRects = []) {
   return [
     ...fields.filter(field => field.hidden).map(field => ({ key: `field-${field.id}`, rect: field.rect })),
-    ...manual.filter(mask => mask.hidden !== false).map(mask => ({ key: `manual-${mask.id}`, rect: mask.rect }))
+    ...manual.filter(mask => mask.hidden !== false).map(mask => ({ key: `manual-${mask.id}`, rect: mask.rect })),
+    ...instructionRects.map(rect => ({ key: `instruction-${rect.join(',')}`, rect }))
   ];
 }
-export function coverageSummary(fields, manual) {
+export function coverageSummary(fields, manual, instructionRects = []) {
   const hidden = fields.filter(field => field.hidden).length;
-  return { detected: fields.length, hidden, markedVisible: fields.length - hidden, manual: manual.filter(mask => mask.hidden !== false).length, needsReview: fields.filter(field => (field.recommendation?.action === 'review' || field.pendingReveal) && !field.userOverride).length, masks: activeMasks(fields, manual).length };
+  return { detected: fields.length, hidden, markedVisible: fields.length - hidden, manual: manual.filter(mask => mask.hidden !== false).length, needsReview: fields.filter(field => (field.recommendation?.action === 'review' || field.pendingReveal) && !field.userOverride).length, masks: activeMasks(fields, manual, instructionRects).length };
 }

@@ -8,13 +8,14 @@ export const audiences = {
 };
 // Legacy purposes remain exported for existing integrations and regression checks.
 export const purposes = { share: purposeRegistry.share, advice: purposeRegistry.advice, issue: { label: 'Explain a problem', keep: 'The issue and relevant non-private messages.' }, lookup: purposeRegistry.lookup };
-export function recommendField(field, { documentType = 'general', context = '', purpose = '' } = {}) {
+export function recommendField(field, { documentType = 'general', context = '', purpose = '', maskCategories } = {}) {
   const type = field.category || field.id;
   const result = (action, reason) => ({ action, reason });
   const allowed = Object.hasOwn(documentTypes, documentType) && (documentTypes[documentType].audiences.includes(context)) && purposesFor(documentType).includes(purpose);
   if (type === 'secret') return result('redact', 'Keep passwords, access codes and tokens out of the shared copy. Masking does not revoke an exposed credential; rotate or revoke it if it was disclosed.');
   if (field.retained) return result('review', 'Kept from earlier coverage because this region or choice could not be matched reliably in the latest scan. Recheck it.');
   if (type === 'personal_path') return result('redact', 'A personal directory can disclose a username or private project. The whole OCR word is covered; adjust the box if needed.');
+  if (maskCategories?.has(type)) return result('redact', 'Your privacy instruction calls for covering this type of detail.');
   if (type === 'internal_endpoint') return result('review', 'This may be an internal host or private network address, but that alone does not establish confidentiality. Confirm whether this recipient needs it.');
   if (allowed && documentType === 'technical_screenshot' && context === 'support' && purpose === 'software_support' && type === 'account') return result('review', 'Software support may need an account identifier. Verify the channel and request before revealing it; credentials should remain hidden.');
   const academic = ['university', 'course', 'grade', 'gpa'].includes(type);

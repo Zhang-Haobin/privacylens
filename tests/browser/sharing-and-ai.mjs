@@ -12,7 +12,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 
 const dist = fileURLToPath(new URL('../../dist', import.meta.url));
-const evidence = fileURLToPath(new URL('../../qa/sharing-ai-redesign/', import.meta.url));
+const evidence = fileURLToPath(new URL('../../qa/custom-privacy-instructions/', import.meta.url));
 const chromePath = process.env.CHROME_PATH || (process.platform === 'darwin'
   ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' : 'chromium');
 const types = { '.js': 'text/javascript', '.html': 'text/html', '.css': 'text/css', '.wasm': 'application/wasm', '.gz': 'application/gzip' };
@@ -28,7 +28,7 @@ async function until(read, message, timeout = 20_000) {
 }
 
 function fixtureServer() {
-  const fixture = { provider: 'qa-provider.example', workerGate: null, detection: [], protection: [] };
+  const fixture = { provider: 'qa-provider.example', workerGate: null, detection: [], protection: [], interpretation: [] };
   const server = createServer(async (request, response) => {
     try {
       const url = new URL(request.url, 'http://127.0.0.1');
@@ -41,13 +41,15 @@ function fixtureServer() {
         const chunks = [];
         for await (const chunk of request) chunks.push(chunk);
         const body = JSON.parse(Buffer.concat(chunks));
-        if (url.searchParams.get('action') === 'recommend-protection') {
+        const action = url.searchParams.get('action');
+        if (action === 'recommend-protection') {
           fixture.protection.push(body);
           const order = body.fields.find(field => field.category === 'order');
           return send(200, { decisions: order ? [{ field_id: order.id, action: 'review', reason_code: 'task_relevant' }] : [] });
         }
-        assert.equal(url.searchParams.get('action'), 'classify-text');
-        await new Promise(release => fixture.detection.push({ body, reply: (status, result) => { send(status, result); release(); } }));
+        assert.ok(['interpret-instruction', 'classify-text'].includes(action));
+        const requests = action === 'interpret-instruction' ? fixture.interpretation : fixture.detection;
+        await new Promise(release => requests.push({ body, reply: (status, result) => { send(status, result); release(); } }));
         return;
       }
       if (url.pathname === '/vendor/ocr/worker.min.js' && fixture.workerGate) await fixture.workerGate;
@@ -139,10 +141,14 @@ async function openChrome(t) {
 }
 
 const delivery = '[data-start-sample="delivery"]';
-const lookupPurpose = 'Help me locate my delayed package.';
 const dialog = selector => '#aiDialog[open] ' + selector + ':not([hidden])';
+const custom = '[data-audience="custom"]';
+const instructionField = '#customInstruction';
+const instructionLayers = '.preview-mask[data-mask-kind="instruction"]';
+const orderField = '#fieldList input[aria-label^="Hide order number"]';
+const phoneField = '#fieldList input[aria-label^="Hide phone number"]';
 
-test('Sharing Settings and all AI Detection states in a real browser', { timeout: 120_000 }, async t => {
+test('Sharing Settings, Custom instructions and optional AI in a real browser', { timeout: 120_000 }, async t => {
   await mkdir(evidence, { recursive: true });
   const { fixture, server } = fixtureServer();
   server.listen(0, '127.0.0.1');
@@ -179,26 +185,107 @@ test('Sharing Settings and all AI Detection states in a real browser', { timeout
     assert.deepEqual(Object.keys(entry.body).sort(), ['consent', 'height', 'lines', 'width']);
     return entry;
   }
+  async function readyToReview() {
+    await click('#continueContext');
+    await until(async () => !await visible('#contextDialog[open]'), 'Review did not open after OCR');
+  }
+  async function chooseInstruction(text) {
+    assert.equal(await visible('#contextDialog[open]'), true);
+    await click(custom);
+    await change(instructionField, text);
+    await readyToReview();
+  }
+  async function shareWithAI(trigger) {
+    await click(trigger);
+    await waitVisible('#protectionDialog[open]');
+    await until(async () => !await disabled('#protectionConsent'), 'The AI destination was not disclosed');
+    assert.equal(await run(() => document.querySelector('#protectionConsent').checked), false);
+    assert.equal(await disabled('#requestProtection'), true);
+    const payload = JSON.parse(await text('#protectionPayloadPreview'));
+    await click('#protectionConsent');
+    await click('#requestProtection');
+    return payload;
+  }
+  async function inspectPNG(boxes = [], points = []) {
+    await click('#exportButton');
+    await waitVisible('#exportDialog[open]');
+    return run(async (boxes, points) => {
+      const image = document.querySelector('#exportPreview');
+      await image.decode();
+      const canvas = document.createElement('canvas');
+      const { naturalWidth: width, naturalHeight: height } = image;
+      canvas.width = width;
+      canvas.height = height;
+      const context = canvas.getContext('2d');
+      context.drawImage(image, 0, 0);
+      const { data } = context.getImageData(0, 0, width, height);
+      const color = (x, y) => [...data.subarray((y * width + x) * 4, (y * width + x) * 4 + 4)];
+      const opaqueMask = (x, y) => {
+        const offset = (y * width + x) * 4;
+        return data[offset] === 32 && data[offset + 1] === 43 && data[offset + 2] === 36 && data[offset + 3] === 255;
+      };
+      let covered = 0;
+      for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) covered += opaqueMask(x, y);
+      const coveredWords = boxes.filter(([left, top, w, h]) => {
+        for (let y = Math.floor(top * height); y < Math.min(height, Math.ceil((top + h) * height)); y++) {
+          for (let x = Math.floor(left * width); x < Math.min(width, Math.ceil((left + w) * width)); x++) if (!opaqueMask(x, y)) return false;
+        }
+        return true;
+      }).length;
+      return { width, height, covered, coveredWords, samples: points.map(([x, y]) => color(x, y)) };
+    }, boxes, points);
+  }
+  async function dragCanvas(from, to) {
+    const positions = await run(points => {
+      const { left, top, width, height } = document.querySelector('#previewCanvas').getBoundingClientRect();
+      return points.map(([x, y]) => ({ x: Math.round(left + width * x), y: Math.round(top + height * y) }));
+    }, [from, to]);
+    await command('Input.dispatchMouseEvent', { type: 'mousePressed', button: 'left', clickCount: 1, ...positions[0] });
+    await command('Input.dispatchMouseEvent', { type: 'mouseMoved', buttons: 1, ...positions[1] });
+    await command('Input.dispatchMouseEvent', { type: 'mouseReleased', button: 'left', clickCount: 1, ...positions[1] });
+  }
+  async function waitForInstructionMasks() {
+    await until(() => run(selector => {
+      const masks = [...document.querySelectorAll(selector)];
+      return masks.length && masks.every(mask => mask.style.clipPath.match(/-?[\d.]+/g)?.every(value => Number(value) === 0));
+    }, instructionLayers), 'Instruction mask animation did not finish');
+    if (await visible('#toast')) await click('#toast button[aria-label="Dismiss notification"]');
+  }
 
-  await t.test('purpose states, distinct audiences, OCR wait and persistent undo', async () => {
+  await t.test('five radio cards, draft preservation, validation and OCR wait', async () => {
     let releaseWorker;
     fixture.workerGate = new Promise(resolve => { releaseWorker = resolve; });
     try {
       await startDelivery();
       assert.equal(await visible('.context-brand .brand-mark'), true);
-      assert.equal(await run(() => document.querySelectorAll('#sharingAudiences button').length), 4);
-      assert.equal(await run(() => document.querySelectorAll('#sharingAudiences .sharing-profile-icon use').length), 4);
+      assert.equal(await run(() => document.querySelectorAll('#sharingAudiences input[type="radio"]').length), 5);
+      assert.equal(await run(() => document.querySelectorAll('#sharingAudiences .sharing-profile-icon use').length), 5);
       assert.equal(await visible('[data-audience="support"]'), true);
       assert.equal(await visible('[data-audience="organization"]'), false);
-      assert.equal(await text('#reviewImageStatus'), 'Choose an audience and a purpose to continue.');
-      await click('[data-audience="support"]');
+      assert.equal(await text('#reviewImageStatus'), 'Choose a sharing option to continue.');
+      assert.equal(await visible('#customInstructionPanel'), false);
+      await click(custom);
+      assert.equal(await visible('#customInstructionPanel'), true);
       assert.equal(await disabled('#continueContext'), true);
-      assert.match(await text('#reviewImageStatus'), /describe your own/);
-      await change('#sharingPurpose', 'return');
-      assert.match(await text('#purposeMode'), /Local rules use this purpose/);
-      await change('#customPurpose', lookupPurpose);
-      assert.match(await text('#purposeMode'), /Delivery lookup/);
-      assert.equal(await text('#commonPurposeLabel'), 'Purpose if custom is cleared');
+      await change(instructionField, ' \n ');
+      assert.equal(await disabled('#continueContext'), true);
+      await click('[data-example="Hide all text."]');
+      assert.equal(await run(() => document.querySelector('#customInstruction').value), 'Hide all text.');
+      assert.equal(await text('#instructionCount'), '14 / 500');
+      assert.equal(fixture.interpretation.length, 0);
+      const draft = '遮挡电话号码。\nHide addresses.';
+      await change(instructionField, draft);
+      await click('[data-audience="support"]');
+      assert.equal(await visible('#customInstructionPanel'), false);
+      assert.equal(await disabled('#continueContext'), false);
+      await run(() => document.querySelector('[data-audience="support"] input').focus());
+      await command('Input.dispatchKeyEvent', { type: 'keyDown', key: 'ArrowRight', code: 'ArrowRight', windowsVirtualKeyCode: 39 });
+      assert.deepEqual(await run(() => [...document.querySelectorAll('[name="sharing-mode"]:checked')].map(radio => radio.value)), ['custom']);
+      assert.equal(await run(() => document.querySelector('#customInstruction').value), draft);
+      await change(instructionField, '字'.repeat(510));
+      assert.equal(await text('#instructionCount'), '500 / 500');
+      await change(instructionField, draft);
+      await click('[data-audience="support"]');
       assert.equal(await disabled('#continueContext'), false);
       await click('#continueContext');
       assert.equal(await disabled('#continueContext'), true);
@@ -208,43 +295,39 @@ test('Sharing Settings and all AI Detection states in a real browser', { timeout
       releaseWorker();
     }
     await until(async () => !await visible('#contextDialog[open]'), 'Review should open automatically after OCR');
+    assert.equal(await run(selector => document.querySelector(selector).checked, orderField), true);
     await click('#contextButton');
-    await click('#confirmPurpose');
-    assert.match(await text('#purposeMode'), /Custom purpose confirmed/);
-    assert.match(await text('#contextFeedback'), /Sharing settings updated/);
-    await screenshot('sharing-settings');
-    await click('#contextExplanation summary');
-    assert.equal(await text('#contextOrder'), 'Useful for delivery lookup');
-    await click('#continueContext');
+    await click('[data-audience="public"]');
+    await readyToReview();
     await click('#toast button[aria-label="Dismiss notification"]');
     await click('#workspaceUndoContext');
     await click('#typeButton');
-    assert.equal(await visible('#confirmPurpose'), true);
+    assert.equal(await run(() => document.querySelector('[data-audience="support"] input').checked), true);
     await change('#documentType', 'general');
-    await click('[data-audience="organization"]');
-    assert.match(await text('#purposeMode'), /Conservative|conservative/);
-    assert.equal(await visible('#organizationHint'), true);
-    assert.equal(await visible('#confirmPurpose'), false);
+    assert.equal(await visible('#contextConflict'), true);
+    assert.equal(await disabled('#continueContext'), true);
+    await click('#acceptContextConflict');
     assert.equal(await disabled('#continueContext'), false);
+    assert.equal(await run(() => document.querySelector('#customInstruction').value), '遮挡电话号码。\nHide addresses.');
   });
 
   await t.test('consent, actual progress, masks, new findings and repeat detection', async () => {
     await startDelivery();
     await until(async () => (await text('#detectedType')).startsWith('Suggested'), 'Sharing Settings OCR did not finish');
+    await screenshot('01-sharing-settings');
+    await click(custom);
     const focus = await run(() => {
-      const field = document.querySelector('#customPurpose');
+      const field = document.querySelector('#customInstruction');
       field.focus();
       const style = getComputedStyle(field);
       return { active: document.activeElement.id, focused: field.matches(':focus'), outline: style.outlineWidth, offset: style.outlineOffset };
     });
-    await screenshot('sharing-settings-empty');
-    assert.deepEqual(focus, { active: 'customPurpose', focused: true, outline: '2px', offset: '0px' });
+    await screenshot('02-custom-selected');
+    assert.deepEqual(focus, { active: 'customInstruction', focused: true, outline: '2px', offset: '0px' });
     await click('[data-audience="support"]');
-    await change('#customPurpose', lookupPurpose);
-    await click('#skipContext');
-    await until(async () => !await disabled('#aiButton'), 'OCR did not finish');
-    const order = '#fieldList input[aria-label^="Hide order number"]';
-    const phone = '#fieldList input[aria-label^="Hide phone number"]';
+    await readyToReview();
+    const order = orderField;
+    const phone = phoneField;
     const box = '#fieldList button[aria-label^="Adjust box for order number" i]';
     await click(phone);
     await click(box);
@@ -264,7 +347,7 @@ test('Sharing Settings and all AI Detection states in a real browser', { timeout
     await openDetection();
     assert.equal(fixture.detection.length, 0);
     assert.equal(await run(() => document.querySelector('#aiDataDetails').open || document.querySelector('#aiTechnicalDetails').open), false);
-    await screenshot('01-consent');
+    await screenshot('detection-consent');
     await click('#aiDataDetails summary');
     await click('#aiPayloadDetails summary');
     const preview = JSON.parse(await text('#aiPayloadPreview'));
@@ -291,14 +374,14 @@ test('Sharing Settings and all AI Detection states in a real browser', { timeout
     const resultFields = request.body.lines.flatMap(line => line.words.filter(word => /^Everyday$/i.test(word.text))).slice(0, 1)
       .map(word => ({ category: 'reference', role: 'unknown', wordIds: [word.id] }));
     assert.equal(resultFields.length, 1, 'The synthetic OCR fixture should have the target word');
-    await screenshot('02-in-progress');
+    await screenshot('detection-in-progress');
     request.reply(200, { model: 'fixture', fields: resultFields });
     await waitVisible(dialog('#aiResult'));
     assert.equal(await run(() => window.qaValidationStage), 'validating');
     assert.equal(await run(() => document.querySelector('#aiStages [aria-current="step"]').dataset.stage), 'applying');
     assert.equal(await text('#aiResultBadge'), '1 additional private detail found');
     assert.match(await text('#aiResultMessage'), /A mask covers the new detail/);
-    await screenshot('03-new-findings');
+    await screenshot('detection-new-findings');
     await click('#aiResultContinue');
     assert.equal(await run(() => document.activeElement.dataset.finding), 'new');
     assert.equal(await run(s => document.querySelector(s).checked, phone), false);
@@ -313,7 +396,7 @@ test('Sharing Settings and all AI Detection states in a real browser', { timeout
     await waitVisible(dialog('#aiResult'));
     assert.equal(await text('#aiResultBadge'), 'No additional private details found');
     assert.equal(await text('#maskCount'), fieldCount);
-    await screenshot('04-no-new-findings');
+    await screenshot('detection-no-new-findings');
     await click('#aiResultContinue');
   });
 
@@ -324,7 +407,7 @@ test('Sharing Settings and all AI Detection states in a real browser', { timeout
     await waitVisible(dialog('#aiFailure'));
     assert.doesNotMatch(await text('#aiFailure'), /Private gateway error detail/);
     assert.equal(await text('#maskCount'), fieldCount);
-    await screenshot('05-failure');
+    await screenshot('detection-failure');
     fixture.provider = 'retry.qa-provider.example';
     const previousRequests = fixture.detection.length;
     await click('#retryAI');
@@ -351,26 +434,193 @@ test('Sharing Settings and all AI Detection states in a real browser', { timeout
 
     await openDetection();
     const stale = await sendDetection();
-    await change('#customPurpose', 'Is delivery available on weekends?');
+    await change('#documentType', 'general');
     stale.reply(200, { model: 'fixture', fields: [] });
     await until(async () => !await visible('#aiDialog[open]'), 'Stale response should return to Review');
     assert.equal(await text('#maskCount'), fieldCount);
     assert.match(await text('#toast'), /Sharing settings changed/);
-    await click('#protectionButton');
-    assert.equal(await disabled('#requestProtection'), true);
+    await click('#typeButton');
+    await change('#documentType', 'delivery');
+    await readyToReview();
     assert.equal(fixture.protection.length, 0);
-    await click('#protectionConsent');
-    await click('#requestProtection');
+    const protectedBefore = await run(selector => document.querySelector(selector).checked, orderField);
+    await shareWithAI('#protectionButton');
     await until(() => fixture.protection.length, 'AI Protection request did not arrive');
     await until(async () => (await text('#protectionStatus')).includes('Review 1 AI suggestion'), 'AI Protection suggestions did not appear');
-    assert.equal(fixture.protection[0].purpose, 'Is delivery available on weekends?');
+    assert.equal(fixture.protection[0].audience, 'support');
+    assert.equal(await run(selector => document.querySelector(selector).checked, orderField), protectedBefore);
     assert.ok(fixture.protection[0].fields.every(field => Object.keys(field).sort().join(',') === 'category,id'));
+    await click('#fieldList button[aria-label^="Review showing order number" i]');
+    await waitVisible('#protectionChoiceDialog[open]');
+    assert.equal(await run(selector => document.querySelector(selector).checked, orderField), true);
+    await click('#protectionChoiceDialog [data-close="protectionChoiceDialog"][autofocus]');
+  });
+
+  await t.test('recognized text, full-image PNG exports, undo and manual adjustments', async () => {
+    await click('#contextButton');
+    await click(custom);
+    await click('[data-example="Hide all text."]');
+    assert.equal(await run(selector => document.querySelectorAll(selector).length, instructionLayers), 0);
+    await screenshot('03-hide-all-text');
+    await readyToReview();
+    assert.match(await text('#instructionReviewMessage'), /recognized text/);
+    await openDetection();
+    const ocr = JSON.parse(await text('#aiPayloadPreview'));
+    await click('#aiClose');
+    const words = ocr.lines.flatMap(line => line.words.map(word => word.box));
+    assert.ok(words.length > 25);
+    const manual = await run(() => {
+      const element = document.querySelector('.preview-mask');
+      return document.querySelector('#manualList').children.length && Boolean(element);
+    });
+    assert.ok(manual);
+    await click('#fitButton');
+    await waitForInstructionMasks();
+    await screenshot('04-ocr-text-covered');
+    const textPNG = await inspectPNG(words);
+    assert.equal(textPNG.coveredWords, words.length);
+    assert.equal(textPNG.width, ocr.width);
+    assert.equal(textPNG.height, ocr.height);
+    assert.ok(textPNG.covered < textPNG.width * textPNG.height);
+    await click('[data-close="exportDialog"]');
+
+    await click('#contextButton');
+    await click('[data-audience="public"]');
+    await readyToReview();
+    await until(async () => !await visible(instructionLayers), 'The former instruction masks are still active');
+    await click('#contextButton');
+    await click(custom);
+    assert.equal(await run(() => document.querySelector('#customInstruction').value), 'Hide all text.');
+    await change(instructionField, 'Hide everything.');
+    await screenshot('05-hide-everything');
+    await readyToReview();
+    assert.match(await text('#instructionReviewMessage'), /opaque mask covers the whole image/);
+    await waitForInstructionMasks();
+    await screenshot('06-full-image-covered');
+    const full = await inspectPNG();
+    assert.equal(full.covered, ocr.width * ocr.height);
+    assert.equal(await run(selector => document.querySelector(selector).checked, phoneField), false);
+    const exactPNG = await run(async () => {
+      const blob = await (await fetch(document.querySelector('#exportPreview').src)).blob();
+      return new Promise(resolve => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result.split(',')[1]);
+        reader.readAsDataURL(blob);
+      });
+    });
+    const downloadDir = await mkdtemp(join(tmpdir(), 'privacylens-export-test-'));
+    t.after(() => rm(downloadDir, { recursive: true, force: true }));
+    await command('Page.setDownloadBehavior', { behavior: 'allow', downloadPath: downloadDir });
+    await click('#reviewConfirmation');
+    await click('#downloadButton');
+    const downloaded = await until(() => readFile(join(downloadDir, 'privacylens-delivery-custom-sample.png')).catch(() => null), 'The protected PNG did not download');
+    assert.deepEqual(downloaded, Buffer.from(exactPNG, 'base64'));
+    await writeFile(join(evidence, 'opaque-png-export.png'), downloaded);
+    await click('#toggleInstruction');
+    await until(async () => !await visible(instructionLayers), 'Undo did not remove the custom mask');
+    assert.equal(await run(() => document.querySelector('#manualList').children.length), 1);
+    assert.equal(await run(selector => document.querySelector(selector).checked, phoneField), false);
+    await click('#toggleInstruction');
+    assert.equal(await run(selector => document.querySelectorAll(selector).length, instructionLayers), 1);
+  });
+
+  await t.test('specific area uses the existing manual editor and keep-only requires a reviewed region', async () => {
+    await click('#contextButton');
+    await click('[data-example="Hide a specific area."]');
+    assert.match(await text('#instructionExampleHint'), /draw a mask/);
+    await readyToReview();
+    await click('#fitButton');
+    await click('#drawInstructionArea');
+    await dragCanvas([.13, .22], [.30, .26]);
+    assert.equal(await run(() => document.querySelector('#manualList').children.length), 2);
+    await click('#drawButton');
+    const adjust = '#manualList button[aria-label="Adjust box for manual mask 2"]';
+    await click(adjust);
+    const left = await run(() => document.querySelector('.mask-adjust').style.left);
+    await command('Input.dispatchKeyEvent', { type: 'keyDown', key: 'ArrowRight', code: 'ArrowRight', windowsVirtualKeyCode: 39 });
+    assert.notEqual(await run(() => document.querySelector('.mask-adjust').style.left), left);
+    await click('#finishAdjustButton');
+    await click('#manualList button[aria-label="Remove manual mask 2"]');
+    await waitVisible('#manualList button[aria-label="Restore manual mask 2"]');
+
+    await click('#contextButton');
+    await chooseInstruction('Keep only the delivery status.');
+    assert.match(await text('#instructionReviewHeading'), /Select the area/);
+    assert.equal(await run(selector => document.querySelectorAll(selector).length, instructionLayers), 0);
+    await click('#fitButton');
+    await click('#drawInstructionArea');
+    assert.equal(await run(selector => document.querySelector(selector).checked, orderField), true);
+    // The release is over the default order-number box. It must not toggle the field.
+    await dragCanvas([.35, .08], [.68, .15]);
+    await waitVisible('#keepAreaDialog[open]');
+    assert.equal(await run(selector => document.querySelector(selector).checked, orderField), true);
+    assert.equal(await run(selector => document.querySelectorAll(selector).length, instructionLayers), 0);
+    await click('#confirmKeepArea');
+    assert.equal(await run(selector => document.querySelector(selector).checked, orderField), true);
+    assert.equal(await run(selector => document.querySelectorAll(selector).length, instructionLayers), 4);
+    const kept = await inspectPNG([], [[0, 0], [340, 110], [759, 1029]]);
+    assert.deepEqual(kept.samples[0], [32, 43, 36, 255]);
+    assert.notDeepEqual(kept.samples[1], [32, 43, 36, 255]);
+    assert.deepEqual(kept.samples[2], [32, 43, 36, 255]);
+    assert.equal(await run(() => document.querySelector('#manualList').children.length), 2);
+    await click('[data-close="exportDialog"]');
+  });
+
+  await t.test('interpretation is independently consented, screened, stale-safe and applied only by choice', async () => {
+    await click('#contextButton');
+    await chooseInstruction('Please cover the fields that could identify the customer.');
+    assert.equal(await text('#instructionReviewHeading'), 'Additional review needed');
+    assert.equal(fixture.interpretation.length, 0);
+    await click('#interpretInstruction');
+    await until(async () => !await disabled('#protectionConsent'), 'The AI destination was not disclosed');
+    assert.equal(await disabled('#requestProtection'), true);
+    await screenshot('08-interpretation-consent');
+    await click('[data-close="protectionDialog"]');
+    assert.equal(fixture.interpretation.length, 0);
+
+    const preview = await shareWithAI('#interpretInstruction');
+    const obsolete = await until(() => fixture.interpretation[0], 'Interpretation request not received');
+    assert.deepEqual(obsolete.body, preview);
+    assert.deepEqual(Object.keys(preview).sort(), ['categories', 'consent', 'documentType', 'instruction']);
+    assert.ok(preview.categories.every(category => typeof category === 'string'));
+    await click('#contextButton');
+    await chooseInstruction('I want every word in this picture covered.');
+    obsolete.reply(200, { operations: [{ type: 'mask_image' }] });
+    assert.equal(await visible('#instructionAIResult'), false);
+
+    await shareWithAI('#interpretInstruction');
+    (await until(() => fixture.interpretation[1], 'Second interpretation not received'))
+      .reply(200, { operations: [{ type: 'keep_area', rect: [0, 0, 100, 100] }] });
+    await until(async () => (await text('#protectionStatus')).includes('unavailable'), 'The invalid response was not rejected');
+    assert.equal(await visible('#instructionAIResult'), false);
+    const previous = await run(selector => document.querySelector(selector).checked, phoneField);
+    await shareWithAI('#interpretInstruction');
+    (await until(() => fixture.interpretation[2], 'Third interpretation not received'))
+      .reply(200, { operations: [{ type: 'mask_text' }] });
+    await waitVisible('#instructionAIResult');
+    assert.equal(await run(selector => document.querySelectorAll(selector).length, instructionLayers), 0);
+    await run(() => {
+      const result = document.querySelector('#instructionAIResult');
+      result.scrollIntoView({ block: 'nearest' });
+    });
+    await screenshot('09-interpretation-result');
+    await click('#applyAIInstruction');
+    assert.equal(await text('#instructionReviewHeading'), 'AI operation applied');
+    assert.ok(await run(selector => document.querySelectorAll(selector).length, instructionLayers));
+    assert.equal(await run(selector => document.querySelector(selector).checked, phoneField), previous);
+    assert.equal(await run(() => document.querySelector('#manualList').children.length), 2);
+    await click('#reapplyMasks');
+    await click('#confirmReapply');
+    assert.equal(await run(selector => document.querySelector(selector).checked, phoneField), true);
+    assert.equal(await run(() => document.querySelector('#manualList').children.length), 2);
   });
 
   await t.test('mobile layout, keyboard close and reduced-motion progress', async () => {
     await command('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
     await command('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
     await click('#contextButton');
+    await click(custom);
+    await click('[data-example="Hide all text."]');
     const fits = selector => run(s => {
       const element = document.querySelector(s);
       const { left, top, right, bottom } = element.getBoundingClientRect();
@@ -378,11 +628,11 @@ test('Sharing Settings and all AI Detection states in a real browser', { timeout
     }, selector);
     assert.equal(await fits('#contextDialog'), true);
     assert.equal(await fits('#continueContext'), true);
-    assert.equal(await run(() =>
-      document.querySelector('#contextExplanation summary').getBoundingClientRect().bottom <=
-      document.querySelector('.context-body').getBoundingClientRect().bottom), true);
-    await screenshot('sharing-settings-mobile');
-    await click('#continueContext');
+    assert.equal(await run(() => document.querySelector('.context-body').scrollWidth === document.querySelector('.context-body').clientWidth), true);
+    await screenshot('07-custom-mobile');
+    await run(() => document.querySelector('.context-body').scrollTop = document.querySelector('.context-body').scrollHeight);
+    await screenshot('07b-custom-mobile-panel');
+    await readyToReview();
     if (!await run(() => document.querySelector('#reviewToggle').getAttribute('aria-expanded') === 'true')) await click('#reviewToggle');
     await openDetection();
     assert.equal(await fits('#aiDialog'), true);
@@ -422,7 +672,12 @@ test('Sharing Settings and all AI Detection states in a real browser', { timeout
     await waitVisible('#contextDialog[open]');
     request.reply(200, { fields: [] });
     assert.equal(await visible('#aiDialog[open]'), false);
-    await click('#skipContext');
+    await click('[data-audience="support"]');
+    await waitVisible('#contextConflict');
+    assert.equal(await run(() => document.querySelector('[data-audience="support"] input').checked), true);
+    assert.match(await text('#detectedType'), /General \/ other/);
+    await click('#acceptContextConflict');
+    await readyToReview();
     await until(async () => !await disabled('#aiButton'), 'Replacement image OCR did not finish');
     assert.equal(await text('#fileLabel'), 'synthetic-replacement.png');
     assert.equal(await text('#maskCount'), '0');

@@ -23,6 +23,10 @@
     <symbol id="i-document" viewBox="0 0 24 24"><path d="M7 3h7l5 5v11a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Zm7 0v5h5M9 12h6m-6 4h6"/></symbol>
     <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3m-4 4v3"/></symbol>
     <symbol id="i-box" viewBox="0 0 24 24"><path d="m3 7 9-4 9 4v11l-9 4-9-4Zm0 0 9 4 9-4M12 11v11M7 5l10 5"/></symbol>
+    <symbol id="i-sparkle" viewBox="0 0 24 24"><path d="M10 3c.8 5 2.5 6.7 7.5 7.5-5 .8-6.7 2.5-7.5 7.5-.8-5-2.5-6.7-7.5-7.5C7.5 9.7 9.2 8 10 3Zm9 0v6m-3-3h6"/></symbol>
+    <symbol id="i-text" viewBox="0 0 24 24"><path d="m4 18 5-13 5 13m-8-5h6m6-7h3m-1.5 0v12m-1.5 0h3"/></symbol>
+    <symbol id="i-person" viewBox="0 0 24 24"><circle cx="12" cy="7" r="3.5"/><path d="M5 21v-2a7 7 0 0 1 14 0v2"/></symbol>
+    <symbol id="i-truck" viewBox="0 0 24 24"><path d="M3 17V5h12v12m0-8h4l3 4v4h-3M3 17h2m4 0h6"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/></symbol>
     <symbol id="i-crop" viewBox="0 0 24 24"><path d="M4 2v18h18M2 4h18v18"/></symbol>
     <symbol id="i-reset" viewBox="0 0 24 24"><path d="M4 10a8 8 0 1 1 1 8M4 4v6h6"/></symbol>
     <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10v1"/></symbol>
@@ -99,9 +103,22 @@
           <button id="reviewToggle" class="review-toggle" aria-expanded="false" aria-controls="reviewScroll"><span class="sheet-handle"></span><span id="sheetLabel">Review details</span><span id="sheetArrow" aria-hidden="true">↑</span></button>
           <div class="review-heading"><div class="section-kicker">YOUR SHARING COPY</div><div class="review-title"><h2>Privacy review</h2><span class="count-badge" id="maskCount">0</span></div><p class="muted" id="reviewIntro">Review each detail in your image.</p><p class="review-states" id="reviewStates" role="status"></p><div class="ai-assistant" id="aiAssistant"><div><strong>✦ AI Privacy Assistant</strong><p id="aiAssistantStatus">Optional extra review of recognized text.</p></div><button id="aiButton" class="inline-action">Find more private details</button></div></div>
           <div class="review-scroll" id="reviewScroll" tabindex="0" role="region" aria-label="Private details to review">
+            <section id="instructionReview" class="instruction-review" aria-labelledby="instructionReviewHeading" hidden>
+              <h3 id="instructionReviewHeading"></h3><p id="instructionReviewMessage" role="status"></p>
+              <div class="instruction-review-actions">
+                <button id="drawInstructionArea" type="button" class="inline-action" hidden></button>
+                <button id="toggleInstruction" type="button" class="inline-action" hidden></button>
+                <button id="editInstruction" type="button" class="inline-action">Edit instruction</button>
+              </div>
+            </section>
             <section id="protectionPanel" class="protection-panel" aria-label="AI sharing suggestions" hidden>
               <button id="protectionButton" class="tool-button">Suggest what to share</button>
+              <button id="interpretInstruction" class="tool-button" type="button" hidden>Interpret instruction with AI</button>
               <p id="protectionStatus" role="status"></p>
+              <div id="instructionAIResult" class="instruction-ai-result" hidden>
+                <p id="instructionAIProposal"></p>
+                <button id="applyAIInstruction" class="inline-action" type="button">Apply suggested operation</button>
+              </div>
               <button id="cancelProtection" class="inline-action" hidden>Cancel sharing analysis</button>
             </section>
             <div class="demo-notice"><svg><use href="#i-info"/></svg><span id="demoNotice"></span></div><p id="aiVisibilityNotice" class="ai-visibility-notice" role="status" hidden></p><button id="reapplyMasks" class="inline-action reapply-masks" hidden>Reapply suggested masks</button><div id="aiTypeSuggestion" class="ai-type-suggestion" hidden><p id="aiTypeMessage"></p><button id="applyAIType" class="inline-action">Apply and review</button><button id="dismissAIType" class="inline-action">Dismiss</button></div><details id="aiInsightsPanel" class="ai-insights" hidden><summary id="aiInsightsSummary">AI insights</summary><p>Choose a result to locate it in your image.</p><div id="aiInsightsList"></div></details><details id="pendingRevealPanel" class="pending-reveals" hidden><summary id="pendingRevealSummary"></summary><p>These suggested details are still hidden. Review the list before choosing to show them. Other overlapping masks may still cover a detail.</p><ul id="pendingRevealList"></ul><button id="applySuggestedReveals" class="tool-button">Show these suggested details</button></details><div id="fieldList" class="field-list"></div><div id="manualList" class="manual-list"></div><details id="ocrLinesPanel" class="ocr-lines-panel" hidden><summary id="ocrLinesSummary">Recognized text</summary><p>Click a line to mask it. Other overlapping masks may still cover it.</p><div id="ocrLineList" class="ocr-line-list"></div></details><div class="preserve-note" id="preserveNote"><div><strong>The useful part stays.</strong><p></p></div></div></div>
@@ -130,24 +147,33 @@
         <p id="typeEvidence" class="type-evidence"></p>
         <button id="useLocalType" class="inline-action" hidden>Use local suggestion</button>
       </details>
-      <h2 id="contextHeading" tabindex="-1">Who are you sharing with?</h2>
-      <div id="sharingAudiences" class="sharing-profiles" role="group" aria-label="Audience"></div>
-      <p id="organizationHint" class="context-audience-hint" hidden>For an order screenshot going to a seller or carrier’s support team, change the type to Delivery / order, then choose Official support.</p>
-      <div class="context-purpose-section" role="group" aria-labelledby="purposeHeading">
-        <h3 id="purposeHeading">Why are you sharing this screenshot?</h3>
-        <div class="purpose-fields">
-          <label class="compact-label" for="sharingPurpose"><span id="commonPurposeLabel">Choose a common purpose</span>
-            <select id="sharingPurpose" aria-describedby="purposeMode"></select>
+      <h2 id="contextHeading" tabindex="-1">How would you like to share this screenshot?</h2>
+      <div id="sharingAudiences" class="sharing-profiles" role="radiogroup" aria-labelledby="contextHeading">
+        <div id="customSharing" class="custom-sharing">
+          <label class="sharing-profile" data-audience="custom">
+            <input type="radio" name="sharing-mode" value="custom" aria-labelledby="customSharingLabel" aria-describedby="customSharingDescription">
+            <span class="sharing-profile-icon" aria-hidden="true"><svg><use href="#i-sparkle"/></svg></span>
+            <span><strong id="customSharingLabel">Custom</strong><small id="customSharingDescription">Tell PrivacyLens exactly what to hide or keep.</small></span>
+            <span class="radio-dot" aria-hidden="true"></span>
           </label>
-          <label class="compact-label" for="customPurpose">Or describe your purpose
-            <textarea id="customPurpose" maxlength="500" rows="2" placeholder="Describe what you need to share…" aria-describedby="purposeMode"></textarea>
-          </label>
-        </div>
-        <div class="purpose-mode">
-          <p id="purposeMode" role="status"></p>
-          <button id="confirmPurpose" class="inline-action" type="button" hidden>Confirm</button>
         </div>
       </div>
+      <section class="custom-instruction-panel" id="customInstructionPanel" aria-labelledby="customInstructionLabel" hidden>
+        <label for="customInstruction" id="customInstructionLabel">Your privacy instruction</label>
+        <textarea id="customInstruction" maxlength="500" rows="3" placeholder="e.g., Hide all text, or hide personal details but keep the delivery status." aria-describedby="instructionHelp instructionCount instructionExampleHint"></textarea>
+        <div class="instruction-count" id="instructionCount">0 / 500</div>
+        <div class="instruction-examples">
+          <span>Quick examples</span>
+          <button type="button" data-example="Hide all text."><svg aria-hidden="true"><use href="#i-text"/></svg>Hide all text</button>
+          <button type="button" data-example="Hide personal information."><svg aria-hidden="true"><use href="#i-person"/></svg>Hide personal information</button>
+          <button type="button" data-example="Keep only the delivery status."><svg aria-hidden="true"><use href="#i-truck"/></svg>Keep only the delivery status</button>
+          <button type="button" data-example="Hide a specific area."><svg aria-hidden="true"><use href="#i-crop"/></svg>Hide a specific area</button>
+        </div>
+        <p class="instruction-example-hint" id="instructionExampleHint" role="status" hidden></p>
+        <div class="instruction-help" id="instructionHelp">
+          <svg aria-hidden="true"><use href="#i-info"/></svg><div><strong>How it works</strong><p>Supported instructions apply locally when you enter Review. For other requests, PrivacyLens starts with conservative protection, with optional AI suggestions during Review.</p></div>
+        </div>
+      </section>
       <div id="contextConflict" class="context-conflict" hidden>
         <p id="contextConflictMessage" role="status"></p>
         <button id="acceptContextConflict" class="inline-action" type="button">Keep my choices</button>
@@ -235,20 +261,21 @@
     </section>
   </dialog>
   <dialog id="protectionDialog" class="protection-dialog" aria-labelledby="protectionHeading">
-    <div class="dialog-top"><span class="eyebrow">OPTIONAL AI PROTECTION</span><button class="icon-button" data-close="protectionDialog" aria-label="Close sharing analysis"><svg><use href="#i-x"/></svg></button></div>
-    <h2 id="protectionHeading">Suggest what to share</h2>
-    <p>This sends the screened purpose, audience, document type and field categories to this site's server, then to <strong data-ai-provider>the configured AI provider</strong>. Your screenshot, OCR text, detected values and recipient notes stay on your device.</p>
+    <div class="dialog-top"><span class="eyebrow" id="protectionTypeLabel">OPTIONAL AI PROTECTION</span><button class="icon-button" data-close="protectionDialog" aria-label="Close sharing analysis"><svg><use href="#i-x"/></svg></button></div>
+    <h2 id="protectionHeading" tabindex="-1">Suggest what to share</h2>
+    <p><span id="protectionDisclosure"></span> <strong id="protectionProvider" data-ai-provider>the configured AI provider</strong>. Your screenshot, OCR output and recipient notes stay on your device.</p>
     <dl class="protection-preview">
-      <div><dt>Purpose to be sent</dt><dd id="protectionPurposePreview"></dd></div>
-      <div><dt>Audience and document</dt><dd id="protectionContextPreview"></dd></div>
+      <div><dt id="protectionTextLabel">Sharing context to be sent</dt><dd id="protectionPurposePreview"></dd></div>
+      <div><dt id="protectionContextLabel">Audience and document</dt><dd id="protectionContextPreview"></dd></div>
       <div><dt>Field categories</dt><dd id="protectionFieldsPreview"></dd></div>
     </dl>
     <details id="protectionDataDetails" class="scan-details ai-disclosure">
       <summary>View exact request</summary>
       <pre id="protectionPayloadPreview" class="ai-send-preview"></pre>
     </details>
-    <p class="ai-help">The purpose may still contain personal information. Check the preview before sending it. Review any AI suggestion before showing a detail.</p>
-    <label class="ai-consent"><input id="protectionConsent" type="checkbox"><span>I agree to send this purpose and listed metadata for AI sharing suggestions.</span></label>
+    <p class="ai-help" id="protectionPrivacyHelp"></p>
+    <label class="ai-consent"><input id="protectionConsent" type="checkbox" disabled><span id="protectionConsentLabel"></span></label>
+    <p class="ai-help" id="protectionProviderStatus" role="status"></p>
     <button id="requestProtection" class="primary-button" disabled>Get sharing suggestions</button>
   </dialog>
   <dialog id="protectionChoiceDialog" aria-labelledby="protectionChoiceHeading">
@@ -258,6 +285,16 @@
     <div class="reapply-actions">
       <button class="tool-button" data-close="protectionChoiceDialog" autofocus>Cancel</button>
       <button id="confirmProtectionChoice" class="primary-button"></button>
+    </div>
+  </dialog>
+  <dialog id="keepAreaDialog" aria-labelledby="keepAreaHeading">
+    <div class="dialog-top"><span class="eyebrow">CUSTOM PRIVACY INSTRUCTION</span><button class="icon-button" data-close="keepAreaDialog" aria-label="Close area confirmation"><svg><use href="#i-x"/></svg></button></div>
+    <h2 id="keepAreaHeading">Keep only this area?</h2>
+    <p>We’ll cover every pixel outside your selection. Existing field and manual masks also apply inside the selection.</p>
+    <div class="keep-area-preview"><canvas id="keepAreaPreview" role="img" aria-label="Preview of the selected area and surrounding masks"></canvas></div>
+    <div class="reapply-actions">
+      <button type="button" class="tool-button" data-close="keepAreaDialog" autofocus>Cancel</button>
+      <button type="button" id="confirmKeepArea" class="primary-button">Keep selected area</button>
     </div>
   </dialog>
   <dialog id="reapplyDialog" aria-labelledby="reapplyHeading">
@@ -270,7 +307,7 @@
     </div>
   </dialog>
   <div id="toast" class="toast" role="status" hidden></div>
-  <dialog id="aboutDialog"><div class="dialog-top"><span class="eyebrow">BEHIND THE PROTOTYPE</span><button class="icon-button" data-close="aboutDialog" aria-label="Close about dialog"><svg><use href="#i-x"/></svg></button></div><h2>Privacy depends on context.</h2><p>PrivacyLens explores a simple question: can choosing the recipient and purpose help students share useful screenshots with less unnecessary disclosure?</p><div class="about-grid"><div><strong>Working in this version</strong><p>Correctable local document classification, document-specific purposes, context-dependent Hide / Keep / Review recommendations, preserved user choices and four pre-labelled examples, including technical diagnostics, local OCR, optional AI text classification and purpose-based suggestions, editable masks and flattened PNG export.</p></div><div><strong>Still to be evaluated</strong><p>Model accuracy, bounding-box precision, broader screenshot types and evaluation with students. Model suggestions need your review.</p></div></div><div class="chinese-note"><strong>课堂演示建议 / Demo guide</strong><p>选择图片或示例后自动在本机识别文字，再选择分享情境。高级设置保留语言与重扫选项；需要时再主动同意发送识别文字给 gpt-6-luna 分类，图片不发送。示例另有明确标注的预设区域。可组合选择公开平台、亲友、同学同事或官方客服，以及分享目的。文档类型可更正，用途随类型更新。建议包括遮挡、保留和待确认；待确认默认遮挡。用户修改独立保存，切换用途时保留；只有同图字段可靠匹配时才迁移旧选择，未匹配的遮挡保留并提示复核。二维码、条形码和人脸需手动补框。检查漏检后再导出。</p></div><p class="dialog-small">All sample personal details are fictional. Editing and OCR run on this device. AI text classification sends locally screened OCR text and layout; detected credentials are replaced but other personal text and missed credentials may remain. Text is sent through this site's server to its configured provider (default: ai.novacode.top), only with your consent. Images are not sent by this workflow. OCR models load from this site. Text and images are not stored by the app; model assets may be cached by your browser. This app does not save images or results; provider and hosting data policies apply. Suggestions do not guarantee that every sensitive detail is covered.</p><button class="primary-button" data-close="aboutDialog">Back to the prototype <svg><use href="#i-arrow"/></svg></button></dialog>
+  <dialog id="aboutDialog"><div class="dialog-top"><span class="eyebrow">BEHIND THE PROTOTYPE</span><button class="icon-button" data-close="aboutDialog" aria-label="Close about dialog"><svg><use href="#i-x"/></svg></button></div><h2>Privacy depends on context.</h2><p>PrivacyLens explores a simple question: how can students protect sensitive details while keeping useful parts of a screenshot?</p><div class="about-grid"><div><strong>Working in this version</strong><p>Local OCR and document classification, four audience options, custom privacy instructions, optional AI detection and sharing suggestions, editable masks, and flattened PNG export.</p></div><div><strong>Still to be evaluated</strong><p>Model accuracy, bounding-box precision, broader screenshot types and evaluation with students. Model suggestions need your review.</p></div></div><div class="chinese-note"><strong>课堂演示建议 / Demo guide</strong><p>选择图片或示例后自动在本机识别文字，再选择分享情境。高级设置保留语言与重扫选项；需要时再主动同意发送识别文字给 gpt-6-luna 分类，图片不发送。示例另有明确标注的预设区域。可选择公开平台、亲友、同学同事、官方客服，或输入自定义隐私指令。文档类型可更正。建议包括遮挡、保留和待确认；待确认默认遮挡。用户修改独立保存，切换用途时保留；只有同图字段可靠匹配时才迁移旧选择，未匹配的遮挡保留并提示复核。二维码、条形码和人脸需手动补框。检查漏检后再导出。</p></div><p class="dialog-small">All sample personal details are fictional. Editing and OCR run on this device. AI text classification sends locally screened OCR text and layout; detected credentials are replaced but other personal text and missed credentials may remain. Text is sent through this site's server to its configured provider (default: ai.novacode.top), only with your consent. Images are not sent by this workflow. OCR models load from this site. Text and images are not stored by the app; model assets may be cached by your browser. This app does not save images or results; provider and hosting data policies apply. Suggestions do not guarantee that every sensitive detail is covered.</p><button class="primary-button" data-close="aboutDialog">Back to the prototype <svg><use href="#i-arrow"/></svg></button></dialog>
   <dialog id="exportDialog"><div class="dialog-top"><span class="eyebrow">ONE LAST LOOK</span><button class="icon-button" data-close="exportDialog" aria-label="Close export dialog"><svg><use href="#i-x"/></svg></button></div><h2>Ready for your audience?</h2><p id="exportContext"></p><div class="export-preview"><img id="exportPreview" alt="Preview of the exact redacted PNG to download"></div><div id="exportDetails" class="export-details"></div><label class="confirmation"><input type="checkbox" id="reviewConfirmation"><span>I’ve reviewed the whole image, including any details the suggestions may have missed.</span></label><button id="downloadButton" class="primary-button" disabled><svg><use href="#i-download"/></svg> Download protected PNG</button><p class="dialog-small">Only this flattened image is exported. No original image or hidden text is embedded.</p></dialog>
   <script src="app.js" type="module"></script>
 </body>
