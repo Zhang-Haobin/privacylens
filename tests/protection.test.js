@@ -169,6 +169,9 @@ test('local policy gates high-risk, public, unverified and retained fields witho
   }
   assert.equal(safeProtectionRecommendation({ category: 'name' }, { ...support, audience: 'public' }, keep).canReveal, false);
   assert.equal(safeProtectionRecommendation(orderField, { documentType: 'general', audience: 'organization' }, keep).action, 'hide');
+  const generalSupport = validateProtectionRequest({ ...deliveryRequest('Ask for advice'), documentType: 'general' });
+  assert.equal(generalSupport.audience, 'support');
+  assert.equal(safeProtectionRecommendation(orderField, generalSupport, keep).canReveal, false);
   assert.equal(safeProtectionRecommendation({ ...orderField, retained: true }, support, keep).canReveal, false);
   assert.equal(safeProtectionRecommendation(orderField, support, decision('f4', 'review', 'unclear')).canReveal, false);
 

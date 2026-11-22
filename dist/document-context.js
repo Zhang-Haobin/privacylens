@@ -3,7 +3,7 @@ export const documentTypes = {
   transcript: { label: 'Academic transcript', purposes: ['showcase', 'job', 'submission', 'custom'], audiences: ['public', 'circle', 'organization'] },
   chat: { label: 'Chat conversation', purposes: ['post', 'advice', 'report', 'custom'], audiences: ['public', 'circle', 'team', 'organization'] },
   technical_screenshot: { label: 'Technical screenshot', purposes: ['technical_help', 'software_support', 'team_debug', 'custom'], audiences: ['public', 'support', 'team'] },
-  general: { label: 'General / other', purposes: ['share', 'advice', 'submit', 'custom'], audiences: ['public', 'circle', 'team', 'organization'] }
+  general: { label: 'General / other', purposes: ['share', 'advice', 'submit', 'custom'], audiences: ['public', 'circle', 'team', 'support', 'organization'] }
 };
 export const purposeRegistry = {
   technical_help: { label: 'Ask for technical help online', keep: 'Error messages, software versions, relevant stack frames and line numbers.' },

@@ -6,7 +6,7 @@ const sharingDefaults = {
   transcript: { public: 'showcase', circle: 'showcase' },
   chat: { public: 'post', circle: 'advice', team: 'advice' },
   technical_screenshot: { public: 'technical_help', support: 'software_support', team: 'team_debug' },
-  general: { public: 'share', circle: 'advice', team: 'advice' }
+  general: { public: 'share', circle: 'advice', team: 'advice', support: 'advice' }
 };
 
 export function editorSharingChoice(documentType, selection) {

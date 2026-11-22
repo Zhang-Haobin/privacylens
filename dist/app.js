@@ -554,6 +554,14 @@ function countMasks() { return activeMasks(state.fields, state.manual, instructi
 function reapplyCandidates() {
   return state.fields.filter(field => field.userOverride === 'keep' && field.recommendation.action !== 'keep');
 }
+function restoreSuggestedMasks() {
+  const count = reapplyCandidates().length;
+  if (!count) return 0;
+  clearContextChange();
+  state.fields = guardSuggestedReveals(state.fields, applyRecommendations(state.fields, protectionContext(), { applySuggestedMasks: true }));
+  state.view = 'protected';
+  return count;
+}
 function locateField(field) {
       state.highlighted = field.id; state.expandedField = field.id; state.view = 'protected'; state.zoom = 1;
       if (window.matchMedia('(max-width: 900px)').matches) state.reviewExpanded = false;
@@ -1057,6 +1065,7 @@ function setAIStatus(message, error = false) {
   if (state.flow === 'context') renderChooseProgress();
 }
 $('aiConsent').addEventListener('change', renderAIDetectionConsent);
+$('aiRestoreMasks').addEventListener('change', renderAIDetectionConsent);
 $('zoomButton').addEventListener('click', () => setZoom(1));
 $('fitButton').addEventListener('click', () => setZoom(null, 'fit'));
 $('widthButton').addEventListener('click', () => setZoom(null, 'width'));
@@ -1135,8 +1144,14 @@ function currentDetectionPreview(preview) {
 
 function renderAIDetectionConsent() {
   const available = !state.detecting && currentDetectionPreview(aiPreview) && Boolean(aiPreview.provider);
+  const restorable = reapplyCandidates().length > 0;
+  const restore = $('aiRestoreMasks');
+  $('aiRestoreOption').hidden = !restorable;
+  restore.disabled = !available || !restorable;
   $('aiConsent').disabled = !available;
-  $('detectButton').disabled = !available || !$('aiConsent').checked;
+  const button = $('detectButton');
+  button.disabled = !available || !$('aiConsent').checked;
+  button.textContent = restorable && restore.checked ? 'Analyze and restore masks' : 'Analyze text with AI';
 }
 
 function showAIDetectionView(id) {
@@ -1160,13 +1175,16 @@ function setAIDetectionStage(stage) {
   $('aiStageAnnouncement').textContent = steps[active].children[1].textContent;
 }
 
-function showAIDetectionResult() {
+function showAIDetectionResult(restored) {
   const findings = state.aiInsights.filter(item => item.kind === 'new');
   const count = findings.length;
   const masked = state.fields.filter(field => field.hidden && findings.some(item => item.id === field.id)).length;
   const details = count === 1 ? 'detail' : 'details';
+  const restoredLabel = `${restored} suggested ${restored === 1 ? 'mask' : 'masks'} restored`;
+  const restorable = reapplyCandidates().length;
   $('aiResultHeading').textContent = count ? 'AI check complete' : 'Analysis complete';
-  $('aiResultBadge').textContent = count ? `${count} additional private ${details} found` : 'No additional private details found';
+  $('aiResultBadge').textContent = count ? `${count} additional private ${details} found`
+    : restored ? restoredLabel : 'No additional private details found';
   let message = 'AI did not identify any additional fields in this analysis. Check the entire image before sharing.';
   if (count > 0) {
     if (count === 1) {
@@ -1176,11 +1194,16 @@ function showAIDetectionResult() {
         : `${masked} of ${count} new details are masked. Review what’s visible before sharing.`;
     }
   }
+  if (restored) {
+    message = count ? `${message} ${restoredLabel}.` : 'Check the restored masks and the rest of the image before sharing.';
+  }
+  if (restorable) message += ` ${restorable} ${restorable === 1 ? 'detail remains' : 'details remain'} marked visible and can be covered again.`;
   $('aiResultMessage').textContent = message;
+  $('aiResultReapply').hidden = !restorable;
   const next = $('aiResultContinue');
   next.querySelector('span').textContent = count ? 'Review findings' : 'Continue reviewing';
   next.querySelector('svg').toggleAttribute('hidden', !count);
-  next.classList.toggle('ai-detection-secondary', !count);
+  next.classList.toggle('ai-detection-secondary', !count || Boolean(restorable));
   showAIDetectionView('aiResult');
 }
 
@@ -1193,11 +1216,16 @@ $('aiResultContinue').addEventListener('click', () => {
   $('aiInsightsPanel').open = true;
   first.focus();
 });
+$('aiResultReapply').addEventListener('click', () => {
+  dismissAIDetection();
+  openReapplyDialog();
+});
 
 $('detectButton').addEventListener('click', async () => {
   const preview = aiPreview;
   if (state.detecting || !$('aiDialog').open || $('aiReady').hidden || !$('aiConsent').checked
       || !currentDetectionPreview(preview) || !preview.provider) return;
+  const restore = !$('aiRestoreMasks').disabled && $('aiRestoreMasks').checked;
   invalidateProtection();
   const currentId = ++detectionId; const loadId = state.loadId;
   const { document, payload } = preview;
@@ -1241,9 +1269,10 @@ $('detectButton').addEventListener('click', async () => {
     const reconciled = receiveFields(fields);
     state.aiInsights = aiInsights(previousFields, aiFields, state.fields); state.aiTypeSuggestion = suggestTypeFromAI(classified); state.aiStatus = 'complete';
     state.aiDetected = true; state.detectedModel = result.model; state.view = 'protected'; state.highlighted = null;
+    const restored = restore ? restoreSuggestedMasks() : 0;
     const { hidden, detected } = coverageSummary(state.fields, state.manual);
     setAIStatus(`${hidden} of ${detected} detected details hidden after classification. ${reconciled.retained} earlier regions available for review.`);
-    showAIDetectionResult();
+    showAIDetectionResult(restored);
   } catch {
     if (requestIsCurrent()) {
       state.aiStatus = 'failed';
@@ -1423,6 +1452,7 @@ async function openAIDetectionConsent() {
   if (state.detecting) return;
   const dialog = $('aiDialog');
   $('aiConsent').checked = false;
+  $('aiRestoreMasks').checked = false;
   $('retryAIProvider').hidden = true;
   for (const id of ['aiDataDetails', 'aiTextDetails', 'aiPayloadDetails', 'aiTechnicalDetails']) $(id).open = false;
   const recognized = state.ocrDocument;
@@ -1722,20 +1752,18 @@ $('confirmProtectionChoice').addEventListener('click', () => {
   announce(`${field.name} marked ${change.hidden ? 'hidden' : 'visible'}. Review the image before sharing.`);
 });
 
-$('reapplyMasks').addEventListener('click', () => {
+function openReapplyDialog() {
   const count = reapplyCandidates().length;
   if (!count || state.detecting) return;
   $('reapplyMessage').textContent = `This will cover ${count} ${count === 1 ? 'detail you chose' : 'details you chose'} to show. Your added masks and adjusted boxes are preserved.`;
   $('reapplyDialog').showModal();
-});
+}
+$('reapplyMasks').addEventListener('click', openReapplyDialog);
 $('confirmReapply').addEventListener('click', () => {
   if (!$('reapplyDialog').open || state.detecting) return;
-  const count = reapplyCandidates().length;
-  clearContextChange();
-  state.fields = guardSuggestedReveals(state.fields, applyRecommendations(state.fields, protectionContext(), { applySuggestedMasks: true }));
-  state.view = 'protected';
+  const count = restoreSuggestedMasks();
   $('reapplyDialog').close(); render();
-  announce(`${count} recommended ${count === 1 ? 'mask restored' : 'masks restored'}. Review the updated image.`);
+  if (count) announce(`${count} recommended ${count === 1 ? 'mask restored' : 'masks restored'}. Review the updated image.`);
   $('previewHeading').focus({ preventScroll: true });
 });
 $('applyAIType').addEventListener('click', () => {

@@ -303,7 +303,7 @@ test('Sharing Settings, Custom instructions and optional AI in a real browser', 
     await click('#workspaceUndoContext');
     await click('#typeButton');
     assert.equal(await run(() => document.querySelector('[data-audience="support"] input').checked), true);
-    await change('#documentType', 'general');
+    await change('#documentType', 'transcript');
     assert.equal(await visible('#contextConflict'), true);
     assert.equal(await disabled('#continueContext'), true);
     await click('#acceptContextConflict');
@@ -395,9 +395,13 @@ test('Sharing Settings, Custom instructions and optional AI in a real browser', 
     (await sendDetection()).reply(200, { model: 'fixture', fields: resultFields });
     await waitVisible(dialog('#aiResult'));
     assert.equal(await text('#aiResultBadge'), 'No additional private details found');
+    assert.match(await text('#aiResultMessage'), /1 detail remains marked visible/);
     assert.equal(await text('#maskCount'), fieldCount);
     await screenshot('detection-no-new-findings');
-    await click('#aiResultContinue');
+    await click('#aiResultReapply');
+    await waitVisible('#reapplyDialog[open]');
+    assert.equal(await run(selector => document.querySelector(selector).checked, phone), false);
+    await click('#reapplyDialog [data-close="reapplyDialog"][autofocus]');
   });
 
   await t.test('safe failure, fresh retry, cancel, stale response, and independent AI Protection', async () => {
@@ -648,7 +652,7 @@ test('Sharing Settings, Custom instructions and optional AI in a real browser', 
     assert.equal(await run(() => document.activeElement.id), 'aiButton');
   });
 
-  await t.test('a new image invalidates a pending detection result', async () => {
+  await t.test('a new image invalidates old detection and general screenshots can go straight to support review', async () => {
     await command('Emulation.setDeviceMetricsOverride', { width: 1280, height: 800, deviceScaleFactor: 1, mobile: false });
     await openDetection();
     const request = await sendDetection();
@@ -662,6 +666,7 @@ test('Sharing Settings, Custom instructions and optional AI in a real browser', 
       context.fillStyle = 'black';
       context.font = '26px sans-serif';
       context.fillText('Synthetic replacement image', 40, 75);
+      context.fillText('Phone: +1 415 555 0187', 40, 120);
       const blob = await new Promise(resolve => image.toBlob(resolve));
       const files = new DataTransfer();
       files.items.add(new File([blob], 'synthetic-replacement.png', { type: 'image/png' }));
@@ -672,15 +677,63 @@ test('Sharing Settings, Custom instructions and optional AI in a real browser', 
     await waitVisible('#contextDialog[open]');
     request.reply(200, { fields: [] });
     assert.equal(await visible('#aiDialog[open]'), false);
+    await until(async () => (await text('#detectedType')) === 'Suggested: General / other', 'Replacement image did not reach the general OCR fallback');
     await click('[data-audience="support"]');
-    await waitVisible('#contextConflict');
     assert.equal(await run(() => document.querySelector('[data-audience="support"] input').checked), true);
-    assert.match(await text('#detectedType'), /General \/ other/);
-    await click('#acceptContextConflict');
+    assert.equal(await visible('#contextConflict'), false);
+    assert.equal(await disabled('#continueContext'), false);
+    await screenshot('general-official-support');
     await readyToReview();
-    await until(async () => !await disabled('#aiButton'), 'Replacement image OCR did not finish');
     assert.equal(await text('#fileLabel'), 'synthetic-replacement.png');
-    assert.equal(await text('#maskCount'), '0');
+    assert.equal(await text('#typeButton'), 'General / other');
+    assert.match(await text('#contextButton'), /Official support/);
+    assert.equal(await run(selector => document.querySelector(selector)?.checked, phoneField), true);
     assert.match(await text('#aiAssistantStatus'), /Optional review/);
+  });
+
+  await t.test('the AI restore option needs consent and a successful check, and keeps edited mask geometry', async () => {
+    await startDelivery();
+    await click('[data-audience="public"]');
+    await readyToReview();
+    const phoneBox = '#fieldList button[aria-label^="Adjust box for phone number" i]';
+    await click(phoneBox);
+    await command('Input.dispatchKeyEvent', { type: 'keyDown', key: 'ArrowLeft', code: 'ArrowLeft', windowsVirtualKeyCode: 37 });
+    const adjusted = await run(() => document.querySelector('.mask-adjust').style.left);
+    await click('#finishAdjustButton');
+    await click(phoneField);
+    await click('#fitButton');
+    await click('#drawButton');
+    await dragCanvas([.12, .25], [.30, .29]);
+    await click('#drawButton');
+    await click('#manualList button[aria-label="Remove manual mask 1"]');
+    const manualRestore = '#manualList button[aria-label="Restore manual mask 1"]';
+    assert.equal(await visible(manualRestore), true);
+
+    await openDetection();
+    await waitVisible('#aiRestoreOption');
+    assert.equal(await run(() => document.querySelector('#aiRestoreMasks').checked), false);
+    await click('#aiRestoreMasks');
+    assert.equal(await disabled('#detectButton'), true);
+    (await sendDetection()).reply(503, {});
+    await waitVisible(dialog('#aiFailure'));
+    assert.equal(await run(selector => document.querySelector(selector).checked, phoneField), false);
+    await click('#retryAI');
+    await until(async () => !await disabled('#aiConsent'), 'Retry consent did not load');
+    assert.equal(await run(() => document.querySelector('#aiRestoreMasks').checked), false);
+    await click('#aiRestoreMasks');
+    assert.equal(await text('#detectButton'), 'Analyze and restore masks');
+    await screenshot('ai-restore-suggested-masks');
+    const checking = await sendDetection();
+    assert.equal(await run(selector => document.querySelector(selector).checked, phoneField), false);
+    checking.reply(200, { model: 'fixture', fields: [] });
+    await waitVisible(dialog('#aiResult'));
+    assert.equal(await text('#aiResultBadge'), '1 suggested mask restored');
+    assert.equal(await visible('#aiResultReapply'), false);
+    await click('#aiResultContinue');
+    assert.equal(await run(selector => document.querySelector(selector).checked, phoneField), true);
+    assert.equal(await visible(manualRestore), true);
+    await click(phoneBox);
+    assert.equal(await run(() => document.querySelector('.mask-adjust').style.left), adjusted);
+    await click('#finishAdjustButton');
   });
 });

@@ -465,6 +465,9 @@ body.editing main { width: min(1500px, calc(100% - 40px)); }
 .ai-detection-copy { color: #405a4b; font-size: 14px; line-height: 1.6; }
 #aiDialog .ai-consent { padding: 13px 14px; border: 1px solid #d7e3d5; border-radius: 10px; background: #f3f7ef; font-size: 13px; }
 #aiDialog .ai-consent input { width: 18px; height: 18px; }
+.ai-restore-option { display: flex; gap: 10px; align-items: flex-start; margin: 0 0 13px; color: var(--ink); cursor: pointer; font-size: 13px; }
+.ai-restore-option input { flex: none; width: 17px; height: 17px; margin: 3px 0 0; accent-color: var(--green); }
+.ai-restore-option small { display: block; color: var(--muted); font-size: 12px; }
 #aiDialog .ai-disclosure { margin-top: 15px; padding: 11px 13px; border: 1px solid #d7e3d5; border-radius: 10px; background: #f7faf4; }
 #aiDialog .scan-details summary { width: fit-content; cursor: pointer; }
 #aiDialog [data-ai-provider] { overflow-wrap: anywhere; }

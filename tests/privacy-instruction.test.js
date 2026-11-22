@@ -11,13 +11,16 @@ import {
 import { handleAI } from '../lib/ai.js';
 
 test('standard sharing options retain their audience and default to conservative support without a purpose', () => {
-  const support = editorSharingChoice('delivery', 'support');
-  assert.equal(support.context, 'support');
-  assert.equal(support.compatible, true);
-  const [order] = applyRecommendations([{ category: 'order' }], support);
-  assert.equal(order.hidden, true);
-  assert.equal(editorSharingChoice('general', 'support').compatible, false);
+  for (const type of ['delivery', 'general']) {
+    const support = editorSharingChoice(type, 'support');
+    assert.equal(support.context, 'support');
+    assert.equal(support.compatible, true);
+    assert.notEqual(support.purpose, 'lookup');
+    const fields = ['order', 'tracking', 'phone', 'secret'].map(category => ({ category }));
+    assert.ok(applyRecommendations(fields, support).every(field => field.hidden));
+  }
   assert.equal(editorSharingChoice('delivery', 'custom').context, '');
+  assert.equal(editorSharingChoice('transcript', 'support').compatible, false);
   assert.equal(editorSharingChoice('transcript', 'team').compatible, false);
 });
 

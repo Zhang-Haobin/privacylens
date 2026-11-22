@@ -226,6 +226,10 @@
       <label class="ai-consent"><input id="aiConsent" type="checkbox" disabled><span>I agree to send screened OCR text and word layout to <strong data-ai-provider>the configured AI provider</strong>. Personal details may still be present.</span></label>
       <p id="aiReadyStatus" class="ai-ready-status" role="status"></p>
       <button id="retryAIProvider" class="inline-action" type="button" hidden>Retry provider check</button>
+      <label class="ai-restore-option" id="aiRestoreOption" hidden>
+        <input id="aiRestoreMasks" type="checkbox" aria-describedby="aiRestoreHint" disabled>
+        <span><strong>Restore suggested masks after analysis</strong><small id="aiRestoreHint">Cover detected details you chose to show if the local rules recommend hiding them.</small></span>
+      </label>
       <button id="detectButton" class="primary-button" type="button" disabled>Analyze text with AI</button>
       <details id="aiTechnicalDetails" class="scan-details ai-disclosure">
         <summary>Technical details</summary>
@@ -251,7 +255,10 @@
       <h2 id="aiResultHeading" tabindex="-1">Analysis complete</h2>
       <p id="aiResultBadge" class="ai-result-badge"></p>
       <p id="aiResultMessage" class="ai-detection-copy"></p>
-      <button id="aiResultContinue" class="primary-button" type="button"><span>Continue reviewing</span><svg aria-hidden="true" hidden><use href="#i-arrow"/></svg></button>
+      <div class="ai-outcome-actions">
+        <button id="aiResultReapply" class="primary-button" type="button" hidden>Reapply suggested masks</button>
+        <button id="aiResultContinue" class="primary-button" type="button"><span>Continue reviewing</span><svg aria-hidden="true" hidden><use href="#i-arrow"/></svg></button>
+      </div>
     </section>
     <section id="aiFailure" class="ai-detection-view ai-detection-outcome" hidden>
       <span class="ai-result-icon ai-result-icon-warning" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5m0 3V16"/></svg></span>
